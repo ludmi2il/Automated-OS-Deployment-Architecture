@@ -60,8 +60,12 @@ Se conectan vía Ethernet directamente a los puertos LAN del Router TP-Link. Rec
 
 En la carpeta `/scripts` se encuentra la lógica para la detección dinámica de unidades de almacenamiento basada en estado sólido o mecánico, asegurando un particionamiento robusto sin importar el orden de enumeración de la placa madre.
 
-> 🚧 **Work In Progress (WIP):** 
-> Los scripts de automatización se encuentran actualmente en fase de pruebas (Testing) en el laboratorio.
+## 🔮 Roadmap y Próximas Mejoras (Next Steps)
+
+> 🚧 **Work In Progress (WIP):** Los scripts de automatización se encuentran actualmente en fase de pruebas en el laboratorio virtual y físico. Paralelamente, la arquitectura continuará iterando hacia las siguientes mejoras:
+* **Almacenamiento en Frío (Samba)**
+* **Implementación de FOG Snapins**
+* **Inyección dinámica de Drivers**
 
 ## 📘 Documentación Técnica
 * [*Procedimiento de creación y generalización de la Golden Image*](docs/preparacion-golden-image.md)
