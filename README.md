@@ -48,7 +48,7 @@ Se conectan vía Ethernet directamente a los puertos LAN del Router TP-Link. Rec
 
 ## 🚀 Componentes Clave (Key Components)
 
-1. **Servidor FOG (Linux Mint):** Gestión de imágenes, TFTP y almacenamiento NFS.
+1. **Servidor FOG (Debian):** Gestión de imágenes, TFTP y almacenamiento NFS.
 
 2. **Despliegue Desatendido:** Integración con Windows Sysprep y scripts de automatización (Batch, PowerShell) (`SetupComplete.cmd`) para la configuración dinámica de almacenamiento secundario (SSD/HDD), instalación de software adicional y activación de Windows.
 
@@ -73,6 +73,6 @@ Este proyecto se apoya en las siguientes herramientas open-source y utilidades d
 
 * **[FOG Project](https://fogproject.org/)**: Proyecto principal de clonación y despliegue masivo de imágenes por red (PXE). 
   * *Consulta la [Documentación Oficial de FOG](https://docs.fogproject.org/) para parámetros avanzados del kernel y configuraciones del servidor DHCP.*
-* **[Windows Unattend Generator](https://schneegans.de/windows/unattend-generator/)**: Generador web de archivos de respuesta utilizado para construir el `autounattend.xml`. Esta herramienta fue fundamental para automatizar la fase OOBE (Out-Of-Box Experience), forzar la creación de cuentas locales y realizar el bypass de los bloqueos de red en Windows 11.
+* **[Windows Unattend Generator](https://schneegans.de/windows/unattend-generator/)**: Generador web de archivos de respuesta utilizado para construir el `unattend.xml`. Esta herramienta fue fundamental para automatizar la fase OOBE (Out-Of-Box Experience), forzar la creación de cuentas locales y realizar el bypass de los bloqueos de red en Windows 11.
 
 
