@@ -16,21 +16,33 @@ Actualmente, el aprovisionamiento de equipos en el taller se realiza de forma ma
 Esta solución basada en **FOG Project (PXE Boot)** nace para reemplazar las unidades USB, permitiendo el despliegue desatendido de múltiples equipos en simultáneo a través de la red LAN, reduciendo drásticamente los tiempos de instalación y la intervención manual.
 
 
-## 📊 Topología de Red (Network Topology)
+## 📊 Arquitectura de Hardware y Almacenamiento
 
+El servidor principal ha sido migrado de un entorno virtualizado a hardware físico dedicado (Intel i3, 4GB RAM) para maximizar las velocidades de despliegue. 
 
+El almacenamiento primario (SSD 240GB) cuenta con un particionamiento optimizado para FOG:
+* `/` (Raíz): 20 GB para SO y base de datos MariaDB.
+* `swap`: 4 GB para respaldo de memoria durante alta concurrencia de compresión.
+* `/images`: ~215 GB (Punto de montaje exclusivo) para el alojamiento principal de las Golden Images.
+* `HDD 1TB` (Secundario): Destinado a almacenamiento en frío y respaldos vía Samba (WIP).
 
-El siguiente diagrama ilustra la estrategia de red aislada implementada mediante un servidor con doble interfaz (NAT + DHCP secundario) para evitar interferencias con el router principal del taller:
+## 🕸️ Topología de Red Aislada (Network Topology)
 
+Para evitar interferencias y colisiones con el servidor DHCP corporativo de la Universidad, se implementó una topología aislada utilizando un Router de borde físico que realiza NAT hacia la red institucional:
 
-<div align="center">
-<img src="docs/network-topology.png" alt="Topología de Red FOG Server" width="400">
-</div>
+### 1. Router de Borde (TP-Link TL-WR841N)
+* **Puerto WAN (Red Institucional):** Configurado como **Dynamic IP (DHCP Client)**. Solicita IP al servidor de la Facultad para obtener salida a internet.
+* **Puertos LAN (Red del Taller):** Configurado con IP estática **`192.168.10.1`**. Actúa como Puerta de Enlace (Gateway) para el entorno aislado.
+* **Servicio DHCP Interno:** **APAGADO (Disabled)** para ceder el control al servidor FOG.
 
+### 2. Servidor FOG (Debian XFCE)
+* **Interfaz Única (LAN):** Conectada a los puertos LAN del Router. 
+* **IP Estática:** **`192.168.10.2/24`** configurada de forma manual (`nmtui`).
+* **Gateway y DNS:** `192.168.10.1` (Para enrutamiento a través del Router).
+* **Servicios Activos:** `isc-dhcp-server` (Entrega IPs al taller, inyecta la puerta de enlace `192.168.10.1` y la orden de booteo PXE), TFTP y NFS.
 
-* **Placa 1 (WAN):** Conectada a la red general del taller para la salida a internet y descarga de paquetes.
-
-* **Placa 2 (LAN - 192.168.10.1):** Controla el segmento aislado mediante un switch secundario para el aprovisionamiento de equipos por PXE sin afectar el entorno de producción.
+### 3. Equipos Clientes (Bare Metal)
+Se conectan vía Ethernet directamente a los puertos LAN del Router TP-Link. Reciben su IP e instrucciones de booteo desde `192.168.10.2` y el router procesa el NAT para que salgan a Internet a través de su puerta de enlace `192.168.10.1`.
 
 
 
@@ -55,5 +67,12 @@ En la carpeta `/scripts` se encuentra la lógica para la detección dinámica de
 * [*Procedimiento de creación y generalización de la Golden Image*](docs/preparacion-golden-image.md)
 * [*Estructura del archivo unattend.xml*](sysprep/unattend.xml)
 
+## 🔗 Referencias y Recursos Externos
+
+Este proyecto se apoya en las siguientes herramientas open-source y utilidades de la comunidad:
+
+* **[FOG Project](https://fogproject.org/)**: Proyecto principal de clonación y despliegue masivo de imágenes por red (PXE). 
+  * *Consulta la [Documentación Oficial de FOG](https://docs.fogproject.org/) para parámetros avanzados del kernel y configuraciones del servidor DHCP.*
+* **[Windows Unattend Generator](https://schneegans.de/windows/unattend-generator/)**: Generador web de archivos de respuesta utilizado para construir el `autounattend.xml`. Esta herramienta fue fundamental para automatizar la fase OOBE (Out-Of-Box Experience), forzar la creación de cuentas locales y realizar el bypass de los bloqueos de red en Windows 11.
 
 
