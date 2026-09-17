@@ -30,7 +30,7 @@ El almacenamiento primario (SSD 240GB) cuenta con un particionamiento optimizado
 
 Para evitar interferencias y colisiones con el servidor DHCP corporativo de la Universidad, se implementó una topología aislada utilizando un Router de borde físico que realiza NAT hacia la red institucional:
 
-### 1. Router de Borde (TP-Link TL-WR841N)
+### 1. Router de Borde (Gigabit LAN)
 * **Puerto WAN (Red Institucional):** Configurado como **Dynamic IP (DHCP Client)**. Solicita IP al servidor de la Facultad para obtener salida a internet.
 * **Puertos LAN (Red del Taller):** Configurado con IP estática **`192.168.10.1`**. Actúa como Puerta de Enlace (Gateway) para el entorno aislado.
 * **Servicio DHCP Interno:** **APAGADO (Disabled)** para ceder el control al servidor FOG.
@@ -60,12 +60,17 @@ Se conectan vía Ethernet directamente a los puertos LAN del Router TP-Link. Rec
 
 En la carpeta `/scripts` se encuentra la lógica para la detección dinámica de unidades de almacenamiento basada en estado sólido o mecánico, asegurando un particionamiento robusto sin importar el orden de enumeración de la placa madre.
 
+## 🏗️ Entorno de Construcción (Build Environment)
+
+Para garantizar un sistema base limpio y libre de controladores residuales, la preparación de la **Golden Image** (modo auditoría, Sysprep) y el testing preliminar de los scripts se realizan íntegramente en máquinas virtuales utilizando **Microsoft Hyper-V**. Una vez que la imagen es sellada y capturada por el servidor FOG, se procede al despliegue masivo hacia los equipos físicos (Bare Metal) del taller.
+
 ## 🔮 Roadmap y Próximas Mejoras (Next Steps)
 
 > 🚧 **Work In Progress (WIP):** Los scripts de automatización se encuentran actualmente en fase de pruebas en el laboratorio virtual y físico. Paralelamente, la arquitectura continuará iterando hacia las siguientes mejoras:
 * **Almacenamiento en Frío (Samba)**
 * **Implementación de FOG Snapins**
 * **Inyección dinámica de Drivers**
+* **Despliegue de FOG Client para integración automatizada con Active Directory**
 
 ## 📘 Documentación Técnica
 * [*Procedimiento de creación y generalización de la Golden Image*](docs/preparacion-golden-image.md)
