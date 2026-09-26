@@ -1,3 +1,6 @@
+# Obtener el número del disco donde está instalado el sistema operativo (C:)
+$osDiskNumber = (Get-Partition -DriveLetter C).DiskNumber
+
 # Obtener todos los discos en línea
 $allDisks = Get-Disk | Where-Object { $_.OperationalStatus -eq 'Online' }
 $ssdList = @()
@@ -27,24 +30,34 @@ foreach ($disk in $allDisks) {
 # Eliminar la partición de recuperación que bloquea a C:
 Get-Partition | Where-Object { $_.Type -eq 'Recovery' } | Remove-Partition -Confirm:$false
 
-# ESCENARIO 1: Hay un SSD para el SO y un HDD independiente para datos
-if ($ssdList.Count -ge 1 -and $hddList.Count -ge 1) {
-    $dataDiskNumber = $hddList[0].Disk.Number
+# Separar los discos adicionales excluyendo estrictamente el disco del SO
+$extraSsdList = $ssdList | Where-Object { $_.Disk.Number -ne $osDiskNumber }
+$extraHddList = $hddList | Where-Object { $_.Disk.Number -ne $osDiskNumber }
 
-    # 1. Extender la unidad C: para que use el 100% del SSD principal
+# Determinar cuál será el disco de datos (Prioridad: 1. SSD secundario > 2. HDD)
+$dataDiskNumber = $null
+if ($extraSsdList.Count -ge 1) {
+    $dataDiskNumber = $extraSsdList[0].Disk.Number
+} elseif ($extraHddList.Count -ge 1) {
+    $dataDiskNumber = $extraHddList[0].Disk.Number
+}
+
+# ESCENARIO 1: Existe un disco físico adicional disponible para datos
+if ($null -ne $dataDiskNumber) {
+    # 1. Extender la unidad C: para que use el 100% de su disco actual
     $maxSizeC = (Get-PartitionSupportedSize -DriveLetter C).SizeMax
     Resize-Partition -DriveLetter C -Size $maxSizeC
 
-    # 2. Inicializar el HDD libre
+    # 2. Inicializar y formatear el disco extra seleccionado como D:
     Set-Disk -Number $dataDiskNumber -IsOffline $false -IsReadOnly $false -ErrorAction SilentlyContinue
     Clear-Disk -Number $dataDiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
     Initialize-Disk -Number $dataDiskNumber -PartitionStyle GPT -Confirm:$false
     New-Partition -DiskNumber $dataDiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false
 }
-# ESCENARIO 2: Disco único (Solo un SSD o solo un HDD) -> Particionado lógico
+# ESCENARIO 2: Disco único -> Particionado lógico en el disco del SO
 else {
-    $singleDisk = $allDisks[0]
-    $sizeGB = [math]::Round($singleDisk.Size / 1GB)
+    $osDisk = $allDisks | Where-Object { $_.Number -eq $osDiskNumber }
+    $sizeGB = [math]::Round($osDisk.Size / 1GB)
 
     if ($sizeGB -le 140) {
         $cSizeGB = $sizeGB - 15
@@ -58,9 +71,14 @@ else {
     }
 
     $maxSize = (Get-PartitionSupportedSize -DriveLetter C).SizeMax
-    Resize-Partition -DriveLetter C -Size ($cSizeGB * 1GB)
+    $targetSize = $cSizeGB * 1GB
+    
+    # Prevenir errores si el target excede por unos pocos megas el máximo real
+    if ($targetSize -gt $maxSize) { $targetSize = $maxSize }
+    
+    Resize-Partition -DriveLetter C -Size $targetSize
 
     if ($crearD) {
-        New-Partition -DiskNumber $singleDisk.Number -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false
+        New-Partition -DiskNumber $osDisk.Number -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false
     }
 }
