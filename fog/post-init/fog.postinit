@@ -1,0 +1,5 @@
+#!/bin/bash
+
+
+echo "Llamando al script de seleccion de disco..."
+source ${postinitpath}/select-disk.sh
