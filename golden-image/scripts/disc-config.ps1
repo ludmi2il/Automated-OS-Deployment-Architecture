@@ -1,3 +1,14 @@
+# Liberar la letra D: a la fuerza y de forma 100% silenciosa
+if (Get-Volume -DriveLetter D -ErrorAction SilentlyContinue) {
+    @"
+select volume D
+assign letter=Z
+"@ | diskpart | Out-Null
+
+    # Darle 2 segundos al sistema para que refresque las tablas de rutas
+    Start-Sleep -Seconds 2
+}
+
 # Obtener el número del disco donde está instalado el sistema operativo (C:)
 $osDiskNumber = (Get-Partition -DriveLetter C).DiskNumber
 
@@ -57,10 +68,11 @@ if ($null -ne $dataDiskNumber) {
     Resize-Partition -DriveLetter C -Size $maxSizeC
 
     # 2. Inicializar y formatear el disco extra seleccionado como D:
-    Set-Disk -Number $dataDiskNumber -IsOffline $false -IsReadOnly $false -ErrorAction SilentlyContinue
+    Set-Disk -Number $dataDiskNumber -IsOffline $false -ErrorAction SilentlyContinue
+    Set-Disk -Number $dataDiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
     Clear-Disk -Number $dataDiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
     Initialize-Disk -Number $dataDiskNumber -PartitionStyle GPT -Confirm:$false
-    New-Partition -DiskNumber $dataDiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false
+    New-Partition -DiskNumber $dataDiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
 }
 # ESCENARIO 2: Disco único -> Particionado lógico en el disco del SO
 else {
@@ -87,6 +99,6 @@ else {
     Resize-Partition -DriveLetter C -Size $targetSize
 
     if ($crearD) {
-        New-Partition -DiskNumber $osDisk.Number -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false
+        New-Partition -DiskNumber $osDisk.Number -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
     }
 }
