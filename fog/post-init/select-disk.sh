@@ -32,6 +32,12 @@ get_target_disk() {
     # 2. Escaneo de SATA/SAS/USB (sdX)
     for dev in /sys/block/sd*; do
         if [[ -d "$dev" ]]; then
+            # Si el kernel reporta que es removible (pendrive/sd), se saltea
+            local removable=$(cat "$dev/removable" 2>/dev/null)
+            if [[ "$removable" -eq 1 ]]; then
+                continue 
+            fi
+
             local disk_name=$(basename "$dev")
             local rotational=$(cat "$dev/queue/rotational")
             local size=$(cat "$dev/size")

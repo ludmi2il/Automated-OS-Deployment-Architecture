@@ -1,18 +1,24 @@
 # Obtener el número del disco donde está instalado el sistema operativo (C:)
 $osDiskNumber = (Get-Partition -DriveLetter C).DiskNumber
 
-# Obtener todos los discos en línea
-$allDisks = Get-Disk | Where-Object { $_.OperationalStatus -eq 'Online' }
-$ssdList = @()
-$hddList = @()
+# Consultar el hardware físico una sola vez y forzar array
+$allPhysicalDisks = @(Get-PhysicalDisk)
+
+# Obtener todos los discos (incluso Offline), forzando array y excluyendo USB
+$allDisks = @(Get-Disk | Where-Object { $_.BusType -ne 'USB' })
+
+# Inicializar listas tipadas de alto rendimiento
+$ssdList = [System.Collections.Generic.List[PSCustomObject]]::new()
+$hddList = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 # Clasificar discos según su tecnología (SSD / HDD)
 foreach ($disk in $allDisks) {
-    $physicalDisk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq $disk.Number.ToString() }
+    # Búsqueda instantánea en memoria
+    $physicalDisk = $allPhysicalDisks | Where-Object { $_.DeviceID -eq $disk.Number.ToString() }
     $type = $physicalDisk.MediaType
     
-    # Fallback por si el bus es NVMe o el nombre explícito indica SSD
-    if (-not $type) {
+    # Fallback por si Windows reporta nulo, blanco o "Unspecified"
+    if ([string]::IsNullOrWhiteSpace($type) -or $type -eq 'Unspecified') {
         if ($disk.BusType -eq 'NVMe' -or $disk.FriendlyName -match 'SSD') { 
             $type = 'SSD' 
         } else { 
@@ -20,19 +26,21 @@ foreach ($disk in $allDisks) {
         }
     }
 
+    $diskObj = [PSCustomObject]@{ Disk = $disk; SizeGB = [math]::Round($disk.Size / 1GB) }
+
     if ($type -eq 'SSD') {
-        $ssdList += [PSCustomObject]@{ Disk = $disk; SizeGB = [math]::Round($disk.Size / 1GB) }
+        $ssdList.Add($diskObj)
     } else {
-        $hddList += [PSCustomObject]@{ Disk = $disk; SizeGB = [math]::Round($disk.Size / 1GB) }
+        $hddList.Add($diskObj)
     }
 }
 
 # Eliminar la partición de recuperación que bloquea a C:
 Get-Partition | Where-Object { $_.Type -eq 'Recovery' } | Remove-Partition -Confirm:$false
 
-# Separar los discos adicionales excluyendo estrictamente el disco del SO
-$extraSsdList = $ssdList | Where-Object { $_.Disk.Number -ne $osDiskNumber }
-$extraHddList = $hddList | Where-Object { $_.Disk.Number -ne $osDiskNumber }
+# Separar los discos adicionales forzando la estructura de array
+$extraSsdList = @($ssdList | Where-Object { $_.Disk.Number -ne $osDiskNumber })
+$extraHddList = @($hddList | Where-Object { $_.Disk.Number -ne $osDiskNumber })
 
 # Determinar cuál será el disco de datos (Prioridad: 1. SSD secundario > 2. HDD)
 $dataDiskNumber = $null
