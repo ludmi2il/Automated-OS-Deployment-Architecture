@@ -4,7 +4,7 @@
 :: Configuración dinámica de particiones de Sistema y Datos
 powershell.exe -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\disc-config.ps1"
 
-:: Redirección de la carepta de usuario default a la partición de Datos
+:: Redirección de la carpeta de usuario default a la partición de Datos
 powershell.exe -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\redirect-user-folders.ps1"
 
 :: Activa el Windows por KMS
