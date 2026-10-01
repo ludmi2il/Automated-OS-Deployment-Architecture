@@ -4,7 +4,7 @@ Esta tabla documenta las configuraciones de BIOS/UEFI y los binarios de booteo d
 
 | Marca / Modelo | Tipo de BIOS | Secure Boot | Archivo de Booteo FOG | Notas Adicionales / Quirks |
 | :--- | :--- | :--- | :--- | :--- |
-| **Intel Desktop Board 02** | UEFI | Apagado | `ipxe.efi` | Requiere *UEFI Boot* habilitado en BIOS. En FOG, el parámetro *Host BIOS Exit Type* (o global) debe estar forzado en `EXIT` para que pase el arranque al disco local correctamente. |
+| **Intel Desktop Board 02** | UEFI | Apagado | `ipxe.efi` | Requiere *UEFI Boot* y *Boot to Network* habilitados. **Fast Boot desactivado** (`Disable`) para asegurar la inicialización de la red. En FOG, el parámetro *Host BIOS Exit Type* debe estar forzado en `EXIT`. |
 
 Este registro es un documento vivo mantenido por el equipo de soporte IT. Su objetivo es documentar las configuraciones exactas necesarias para que los distintos modelos de motherboards de la facultad arranquen correctamente por red (PXE) hacia el entorno FOG.
 
