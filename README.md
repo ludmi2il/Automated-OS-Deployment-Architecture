@@ -81,6 +81,7 @@ Para garantizar un sistema base limpio y libre de controladores residuales, la p
 * [*Gestión de Excepciones PXE y Reservas Kea DHCP*](docs/fog/dhcp-reservations.md)
 * [*Procedimiento de creación y generalización de la Golden Image*](docs/golden-image/preparacion-golden-image.md)
 * [*Estructura del archivo unattend.xml*](golden-image/sysprep/unattend.xml)
+* [*Registro de Compatibilidad de Hardware y Booteo PXE*](docs/hardware/compatibilidad-pxe.md)
 
 ## 🔗 Referencias y Recursos Externos
 
