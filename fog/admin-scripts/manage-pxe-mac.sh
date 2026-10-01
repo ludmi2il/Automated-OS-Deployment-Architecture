@@ -4,50 +4,54 @@
 CONF_FILE="/etc/kea/kea-dhcp4.conf"
 ACTION=$1
 HOSTNAME=$2
+MAC=$3
+EFI=$4
 
-# Verificar que jq este instalado
-if ! command -v jq &> /dev/null; then
-    echo "Error critico: 'jq' no esta instalado. Ejecuta 'sudo apt install jq'"
-    exit 1
-fi
+# ==============================================================================
+# 1. DEFINICIÓN DE FUNCIONES
+# ==============================================================================
 
-# Validar que al menos se haya pasado una accion
-if [ -z "$ACTION" ]; then
-    echo "Error: Faltan parametros."
+check-dependencies() {
+    if ! command -v jq &> /dev/null; then
+        echo "Error critico: 'jq' no esta instalado. Ejecuta 'sudo apt install jq'"
+        exit 1
+    fi
+}
+
+show-usage() {
+    echo "Error: Faltan parametros o accion invalida."
     echo "Uso para AGREGAR: $0 add <Nombre_Equipo> <MAC_Address> <Archivo_EFI>"
     echo "Uso para BORRAR:  $0 remove <Nombre_Equipo>"
     echo "Uso para LISTAR:  $0 list"
     exit 1
-fi
+}
 
-if [ "$ACTION" == "list" ]; then
+list-reservations() {
     echo "=== Reservas PXE Actuales (Kea DHCP) ==="
-    # Navega por el JSON y extrae los datos de la primera subred configurada por FOG
     jq -r '.Dhcp4.subnet4[0].reservations[]? | "Equipo: \(.hostname) | MAC: \(."hw-address") | EFI: \(."boot-file-name")"' "$CONF_FILE"
     echo "========================================"
-    exit 0
+}
 
-elif [ "$ACTION" == "add" ]; then
-    MAC=$3
-    EFI=$4
-    
-    if [ -z "$HOSTNAME" ] || [ -z "$MAC" ] || [ -z "$EFI" ]; then
+add-reservation() {
+    local name=$1
+    local mac=$2
+    local efi=$3
+
+    if [ -z "$name" ] || [ -z "$mac" ] || [ -z "$efi" ]; then
         echo "Error: Faltan parametros para crear la reserva."
         echo "Ejemplo: $0 add Taller-AsusZ77 00:1A:2B:3C:4D:5E snponly.efi"
         exit 1
     fi
-    
+
     # Estandarizar la MAC a minusculas (formato preferido por Kea)
-    MAC=$(echo "$MAC" | tr '[:upper:]' '[:lower:]')
-    
-    # 1. Lee el array de reservas de la primera subred (o crea uno vacio si no existe).
-    # 2. Elimina cualquier reserva previa que tenga el mismo hostname o la misma MAC para evitar duplicados.
-    # 3. Anexa el nuevo objeto JSON con la reserva.
-    jq "(.Dhcp4.subnet4[0].reservations) |= ( ( . // [] ) | map(select(.hostname != \"$HOSTNAME\" and .\"hw-address\" != \"$MAC\")) + [{\"hostname\": \"$HOSTNAME\", \"hw-address\": \"$MAC\", \"boot-file-name\": \"$EFI\"}] )" "$CONF_FILE" > "$CONF_FILE.tmp"
-    
+    mac=$(echo "$mac" | tr '[:upper:]' '[:lower:]')
+
+    # Modificación atómica del JSON vía archivo temporal
+    jq "(.Dhcp4.subnet4[0].reservations) |= ( ( . // [] ) | map(select(.hostname != \"$name\" and .\"hw-address\" != \"$mac\")) + [{\"hostname\": \"$name\", \"hw-address\": \"$mac\", \"boot-file-name\": \"$efi\"}] )" "$CONF_FILE" > "$CONF_FILE.tmp"
+
     if [ $? -eq 0 ]; then
         mv "$CONF_FILE.tmp" "$CONF_FILE"
-        echo "Exito: Reserva '$HOSTNAME' agregada al archivo de Kea."
+        echo "Exito: Reserva '$name' agregada al archivo de Kea."
         systemctl restart kea-dhcp4-server
         echo "Servicio Kea DHCP reiniciado correctamente."
     else
@@ -55,20 +59,22 @@ elif [ "$ACTION" == "add" ]; then
         rm -f "$CONF_FILE.tmp"
         exit 1
     fi
+}
 
-elif [ "$ACTION" == "remove" ]; then
-    if [ -z "$HOSTNAME" ]; then
+remove-reservation() {
+    local name=$1
+
+    if [ -z "$name" ]; then
         echo "Error: Falta el nombre del equipo a borrar."
         echo "Ejemplo: $0 remove Taller-AsusZ77"
         exit 1
     fi
-    
-    # Filtra el array de reservas eliminando el objeto que coincida con el hostname
-    jq "(.Dhcp4.subnet4[0].reservations) |= ( ( . // [] ) | map(select(.hostname != \"$HOSTNAME\")) )" "$CONF_FILE" > "$CONF_FILE.tmp"
-    
+
+    jq "(.Dhcp4.subnet4[0].reservations) |= ( ( . // [] ) | map(select(.hostname != \"$name\")) )" "$CONF_FILE" > "$CONF_FILE.tmp"
+
     if [ $? -eq 0 ]; then
         mv "$CONF_FILE.tmp" "$CONF_FILE"
-        echo "Exito: Reserva '$HOSTNAME' eliminada (si existia)."
+        echo "Exito: Reserva '$name' eliminada (si existia)."
         systemctl restart kea-dhcp4-server
         echo "Servicio Kea DHCP reiniciado correctamente."
     else
@@ -76,8 +82,25 @@ elif [ "$ACTION" == "remove" ]; then
         rm -f "$CONF_FILE.tmp"
         exit 1
     fi
+}
 
-else
-    echo "Error: Accion '$ACTION' no reconocida. Usa 'add', 'remove' o 'list'."
-    exit 1
-fi
+# ==============================================================================
+# 2. LÓGICA PRINCIPAL (WORKFLOW)
+# ==============================================================================
+
+check-dependencies
+
+case "$ACTION" in
+    list)
+        list-reservations
+        ;;
+    add)
+        add-reservation "$HOSTNAME" "$MAC" "$EFI"
+        ;;
+    remove)
+        remove-reservation "$HOSTNAME"
+        ;;
+    *)
+        show-usage
+        ;;
+esac
