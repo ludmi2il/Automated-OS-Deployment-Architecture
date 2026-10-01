@@ -45,10 +45,12 @@ function Get-StorageInventory {
             else { $type = 'HDD' }
         }
 
+        # SE AGREGA PartitionStyle AL INVENTARIO
         $diskObj = [PSCustomObject]@{
-            Number = $disk.Number
-            SizeGB = [math]::Round($disk.Size / 1GB)
-            Type   = $type
+            Number         = $disk.Number
+            SizeGB         = [math]::Round($disk.Size / 1GB)
+            Type           = $type
+            PartitionStyle = $disk.PartitionStyle
         }
 
         # Separar el disco del SO de los discos adicionales
@@ -77,12 +79,18 @@ function Maximize-Partition {
 }
 
 function Format-SecondaryDataDisk {
-    param([int]$DiskNumber)
+    # SE AGREGA EL PARÁMETRO PartitionStyle
+    param(
+        [int]$DiskNumber,
+        [string]$PartitionStyle
+    )
     
     Set-Disk -Number $DiskNumber -IsOffline $false -ErrorAction SilentlyContinue
     Set-Disk -Number $DiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
     Clear-Disk -Number $DiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
-    Initialize-Disk -Number $DiskNumber -PartitionStyle GPT -Confirm:$false
+    
+    # SE REEMPLAZA EL GPT HARDCODEADO EN CÓDIGO POR LA VARIABLE DINÁMICA
+    Initialize-Disk -Number $DiskNumber -PartitionStyle $PartitionStyle -Confirm:$false
     New-Partition -DiskNumber $DiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
 }
 
@@ -91,6 +99,9 @@ function Split-SingleOSDisk {
         [int]$DiskNumber,
         [int]$SizeGB
     )
+
+    $diskInfo = Get-Disk -Number $DiskNumber
+    $partCount = (Get-Partition -DiskNumber $DiskNumber).Count
 
     if ($SizeGB -le 140) {
         $cSizeGB = $SizeGB - 15
@@ -101,6 +112,13 @@ function Split-SingleOSDisk {
     } else {
         $cSizeGB = 150
         $crearD = $true
+    }
+
+    # VALIDACIÓN MBR
+    if ($crearD -and $diskInfo.PartitionStyle -eq 'MBR' -and $partCount -ge 3) {
+        Write-Warning "Límite MBR detectado. Maximizando C: y abortando partición D:."
+        Maximize-Partition -DriveLetter C
+        return
     }
 
     $maxSize = (Get-PartitionSupportedSize -DriveLetter C).SizeMax
@@ -130,13 +148,13 @@ if ($inventory.ExtraSSDs.Count -gt 0) {
     
     # Escenario 1A: Existe un SSD adicional (Prioridad máxima)
     Maximize-Partition
-    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraSSDs[0].Number
+    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraSSDs[0].Number -PartitionStyle $inventory.OSDisk.PartitionStyle
 
 } elseif ($inventory.ExtraHDDs.Count -gt 0) {
     
     # Escenario 1B: Existe un HDD mecánico adicional (Prioridad media)
     Maximize-Partition
-    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraHDDs[0].Number
+    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraHDDs[0].Number -PartitionStyle $inventory.OSDisk.PartitionStyle
 
 } else {
     
