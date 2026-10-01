@@ -2,77 +2,122 @@
 # Post-init script para FOG Project
 # Objetivo: Seleccion dinamica (NVMe mas chico > SSD SATA mas chico > HDD)
 
-echo "Iniciando escaneo de hardware de almacenamiento..."
+# ==============================================================================
+# 1. DEFINICIÓN DE FUNCIONES
+# ==============================================================================
 
-get_target_disk() {
-    local min_nvme_size=-1
-    local nvme_disk=""
-    local min_ssd_size=-1
-    local ssd_disk=""
-    local hdd_disk=""
+get_smallest_nvme() {
+    local min_size=-1
+    local target_disk=""
 
-    # 1. Escaneo de NVMe (Prioridad Absoluta)
     for dev in /sys/block/nvme[0-9]n[0-9]*; do
         if [[ -d "$dev" ]]; then
-            local disk_name=$(basename "$dev")
-            local size=$(cat "$dev/size")
-
-            if [[ $min_nvme_size -eq -1 ]] || [[ $size -lt $min_nvme_size ]]; then
-                min_nvme_size=$size
-                nvme_disk="/dev/$disk_name"
+            local size=$(cat "$dev/size" 2>/dev/null)
+            if [[ -n "$size" ]]; then
+                if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
+                    min_size=$size
+                    target_disk="/dev/$(basename "$dev")"
+                fi
             fi
         fi
     done
 
-    if [[ -n "$nvme_disk" ]]; then
-        echo "$nvme_disk"
+    echo "$target_disk"
+}
+
+get_smallest_sata_ssd() {
+    local min_size=-1
+    local target_disk=""
+
+    for dev in /sys/block/sd*; do
+        if [[ -d "$dev" ]]; then
+            # Saltear unidades removibles (Pendrives, SD)
+            local removable=$(cat "$dev/removable" 2>/dev/null)
+            [[ "$removable" -eq 1 ]] && continue 
+
+            local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
+            if [[ "$rotational" -eq 0 ]]; then
+                local size=$(cat "$dev/size" 2>/dev/null)
+                if [[ -n "$size" ]]; then
+                    if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
+                        min_size=$size
+                        target_disk="/dev/$(basename "$dev")"
+                    fi
+                fi
+            fi
+        fi
+    done
+
+    echo "$target_disk"
+}
+
+get_smallest_hdd() {
+    local min_size=-1
+    local target_disk=""
+
+    for dev in /sys/block/sd*; do
+        if [[ -d "$dev" ]]; then
+            # Saltear unidades removibles
+            local removable=$(cat "$dev/removable" 2>/dev/null)
+            [[ "$removable" -eq 1 ]] && continue 
+
+            local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
+            if [[ "$rotational" -eq 1 ]]; then
+                local size=$(cat "$dev/size" 2>/dev/null)
+                if [[ -n "$size" ]]; then
+                    if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
+                        min_size=$size
+                        target_disk="/dev/$(basename "$dev")"
+                    fi
+                fi
+            fi
+        fi
+    done
+
+    echo "$target_disk"
+}
+
+resolve_target_disk() {
+    local target=""
+    
+    # 1. Prioridad Absoluta: NVMe
+    target=$(get_smallest_nvme)
+    if [[ -n "$target" ]]; then
+        echo "$target"
         return
     fi
 
-    # 2. Escaneo de SATA/SAS/USB (sdX)
-    for dev in /sys/block/sd*; do
-        if [[ -d "$dev" ]]; then
-            # Si el kernel reporta que es removible (pendrive/sd), se saltea
-            local removable=$(cat "$dev/removable" 2>/dev/null)
-            if [[ "$removable" -eq 1 ]]; then
-                continue 
-            fi
-
-            local disk_name=$(basename "$dev")
-            local rotational=$(cat "$dev/queue/rotational")
-            local size=$(cat "$dev/size")
-
-            if [[ "$rotational" -eq 0 ]]; then
-                # Es estado solido
-                if [[ $min_ssd_size -eq -1 ]] || [[ $size -lt $min_ssd_size ]]; then
-                    min_ssd_size=$size
-                    ssd_disk="/dev/$disk_name"
-                fi
-            else
-                # Es mecanico
-                if [[ -z "$hdd_disk" ]]; then
-                    hdd_disk="/dev/$disk_name"
-                fi
-            fi
-        fi
-    done
-
-    # 3. Retornos de fallback
-    if [[ -n "$ssd_disk" ]]; then
-        echo "$ssd_disk"
-    elif [[ -n "$hdd_disk" ]]; then
-        echo "$hdd_disk"
-    else
-        echo ""
+    # 2. Prioridad Media: SATA SSD
+    target=$(get_smallest_sata_ssd)
+    if [[ -n "$target" ]]; then
+        echo "$target"
+        return
     fi
+
+    # 3. Fallback: Disco Mecánico más chico
+    target=$(get_smallest_hdd)
+    if [[ -n "$target" ]]; then
+        echo "$target"
+        return
+    fi
+
+    echo ""
 }
 
-TARGET_DISK=$(get_target_disk)
+# ==============================================================================
+# 2. LÓGICA PRINCIPAL (WORKFLOW)
+# ==============================================================================
+
+echo "Iniciando escaneo de hardware de almacenamiento a nivel kernel..."
+
+TARGET_DISK=$(resolve_target_disk)
 
 if [[ -n "$TARGET_DISK" ]]; then
-    echo "Disco seleccionado por jerarquia y tamano minimo: $TARGET_DISK"
+    echo "Disco seleccionado por jerarquía y tamaño mínimo: $TARGET_DISK"
+    
+    # Exportar la variable para que el motor de FOG la procese
     export hd="$TARGET_DISK"
 else
-    echo "ERROR CRITICO: No se detecto ningun disco de almacenamiento valido."
+    echo "ERROR CRÍTICO: No se detectó ningún disco de almacenamiento válido."
     sleep 10
 fi

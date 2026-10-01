@@ -1,88 +1,101 @@
-# Liberar la letra D: a la fuerza y de forma 100% silenciosa
-if (Get-Volume -DriveLetter D -ErrorAction SilentlyContinue) {
-    @"
-select volume D
+<#
+.SYNOPSIS
+    Automated Zero-Touch Disk Configuration Script
+.DESCRIPTION
+    Prepara y particiona unidades de almacenamiento de forma dinámica en entornos Sysprep.
+#>
+
+# ==============================================================================
+# 1. DEFINICIÓN DE FUNCIONES
+# ==============================================================================
+
+function Clear-DriveLetter {
+    param(
+        [string]$Letter = 'D' # Valor por defecto
+    )
+
+    if (Get-Volume -DriveLetter $Letter -ErrorAction SilentlyContinue) {
+        @"
+select volume $Letter
 assign letter=Z
 "@ | diskpart | Out-Null
-
-    # Darle 2 segundos al sistema para que refresque las tablas de rutas
-    Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 2
+    }
 }
 
-# Obtener el número del disco donde está instalado el sistema operativo (C:)
-$osDiskNumber = (Get-Partition -DriveLetter C).DiskNumber
+function Remove-RecoveryPartition {
+    Get-Partition | Where-Object { $_.Type -eq 'Recovery' } | Remove-Partition -Confirm:$false
+}
 
-# Consultar el hardware físico una sola vez y forzar array
-$allPhysicalDisks = @(Get-PhysicalDisk)
+function Get-StorageInventory {
+    $osDiskNumber = (Get-Partition -DriveLetter C).DiskNumber
+    $allPhysicalDisks = @(Get-PhysicalDisk)
+    $allDisks = @(Get-Disk | Where-Object { $_.BusType -ne 'USB' })
 
-# Obtener todos los discos (incluso Offline), forzando array y excluyendo USB
-$allDisks = @(Get-Disk | Where-Object { $_.BusType -ne 'USB' })
+    $ssdList = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $hddList = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $osDiskObj = $null
 
-# Inicializar listas tipadas de alto rendimiento
-$ssdList = [System.Collections.Generic.List[PSCustomObject]]::new()
-$hddList = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($disk in $allDisks) {
+        $physicalDisk = $allPhysicalDisks | Where-Object { $_.DeviceID -eq $disk.Number.ToString() }
+        $type = $physicalDisk.MediaType
 
-# Clasificar discos según su tecnología (SSD / HDD)
-foreach ($disk in $allDisks) {
-    # Búsqueda instantánea en memoria
-    $physicalDisk = $allPhysicalDisks | Where-Object { $_.DeviceID -eq $disk.Number.ToString() }
-    $type = $physicalDisk.MediaType
-    
-    # Fallback por si Windows reporta nulo, blanco o "Unspecified"
-    if ([string]::IsNullOrWhiteSpace($type) -or $type -eq 'Unspecified') {
-        if ($disk.BusType -eq 'NVMe' -or $disk.FriendlyName -match 'SSD') { 
-            $type = 'SSD' 
-        } else { 
-            $type = 'HDD' 
+        if ([string]::IsNullOrWhiteSpace($type) -or $type -eq 'Unspecified') {
+            if ($disk.BusType -eq 'NVMe' -or $disk.FriendlyName -match 'SSD') { $type = 'SSD' }
+            else { $type = 'HDD' }
+        }
+
+        $diskObj = [PSCustomObject]@{
+            Number = $disk.Number
+            SizeGB = [math]::Round($disk.Size / 1GB)
+            Type   = $type
+        }
+
+        # Separar el disco del SO de los discos adicionales
+        if ($disk.Number -eq $osDiskNumber) {
+            $osDiskObj = $diskObj
+        } elseif ($type -eq 'SSD') {
+            $ssdList.Add($diskObj)
+        } else {
+            $hddList.Add($diskObj)
         }
     }
 
-    $diskObj = [PSCustomObject]@{ Disk = $disk; SizeGB = [math]::Round($disk.Size / 1GB) }
-
-    if ($type -eq 'SSD') {
-        $ssdList.Add($diskObj)
-    } else {
-        $hddList.Add($diskObj)
+    return @{
+        OSDisk    = $osDiskObj
+        ExtraSSDs = @($ssdList)
+        ExtraHDDs = @($hddList)
     }
 }
 
-# Eliminar la partición de recuperación que bloquea a C:
-Get-Partition | Where-Object { $_.Type -eq 'Recovery' } | Remove-Partition -Confirm:$false
-
-# Separar los discos adicionales forzando la estructura de array
-$extraSsdList = @($ssdList | Where-Object { $_.Disk.Number -ne $osDiskNumber })
-$extraHddList = @($hddList | Where-Object { $_.Disk.Number -ne $osDiskNumber })
-
-# Determinar cuál será el disco de datos (Prioridad: 1. SSD secundario > 2. HDD)
-$dataDiskNumber = $null
-if ($extraSsdList.Count -ge 1) {
-    $dataDiskNumber = $extraSsdList[0].Disk.Number
-} elseif ($extraHddList.Count -ge 1) {
-    $dataDiskNumber = $extraHddList[0].Disk.Number
+function Maximize-Partition {
+    param(
+        [string]$DriveLetter = 'C'
+    )
+    $maxSize = (Get-PartitionSupportedSize -DriveLetter $DriveLetter).SizeMax
+    Resize-Partition -DriveLetter $DriveLetter -Size $maxSize
 }
 
-# ESCENARIO 1: Existe un disco físico adicional disponible para datos
-if ($null -ne $dataDiskNumber) {
-    # 1. Extender la unidad C: para que use el 100% de su disco actual
-    $maxSizeC = (Get-PartitionSupportedSize -DriveLetter C).SizeMax
-    Resize-Partition -DriveLetter C -Size $maxSizeC
-
-    # 2. Inicializar y formatear el disco extra seleccionado como D:
-    Set-Disk -Number $dataDiskNumber -IsOffline $false -ErrorAction SilentlyContinue
-    Set-Disk -Number $dataDiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
-    Clear-Disk -Number $dataDiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
-    Initialize-Disk -Number $dataDiskNumber -PartitionStyle GPT -Confirm:$false
-    New-Partition -DiskNumber $dataDiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
+function Format-SecondaryDataDisk {
+    param([int]$DiskNumber)
+    
+    Set-Disk -Number $DiskNumber -IsOffline $false -ErrorAction SilentlyContinue
+    Set-Disk -Number $DiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
+    Clear-Disk -Number $DiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
+    Initialize-Disk -Number $DiskNumber -PartitionStyle GPT -Confirm:$false
+    New-Partition -DiskNumber $DiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
 }
-# ESCENARIO 2: Disco único -> Particionado lógico en el disco del SO
-else {
-    $osDisk = $allDisks | Where-Object { $_.Number -eq $osDiskNumber }
-    $sizeGB = [math]::Round($osDisk.Size / 1GB)
 
-    if ($sizeGB -le 140) {
-        $cSizeGB = $sizeGB - 15
+function Split-SingleOSDisk {
+    param(
+        [int]$DiskNumber,
+        [int]$SizeGB
+    )
+
+    if ($SizeGB -le 140) {
+        $cSizeGB = $SizeGB - 15
         $crearD = $false
-    } elseif ($sizeGB -le 300) {
+    } elseif ($SizeGB -le 300) {
         $cSizeGB = 120
         $crearD = $true
     } else {
@@ -92,13 +105,42 @@ else {
 
     $maxSize = (Get-PartitionSupportedSize -DriveLetter C).SizeMax
     $targetSize = $cSizeGB * 1GB
-    
-    # Prevenir errores si el target excede por unos pocos megas el máximo real
+
     if ($targetSize -gt $maxSize) { $targetSize = $maxSize }
-    
+
     Resize-Partition -DriveLetter C -Size $targetSize
 
     if ($crearD) {
-        New-Partition -DiskNumber $osDisk.Number -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
+        New-Partition -DiskNumber $DiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
     }
+}
+
+# ==============================================================================
+# 2. LÓGICA PRINCIPAL (WORKFLOW)
+# ==============================================================================
+
+Clear-DriveLetter
+Remove-RecoveryPartition
+
+# Mapear todo el hardware disponible
+$inventory = Get-StorageInventory
+
+# Procesar según los escenarios de hardware
+if ($inventory.ExtraSSDs.Count -gt 0) {
+    
+    # Escenario 1A: Existe un SSD adicional (Prioridad máxima)
+    Maximize-Partition
+    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraSSDs[0].Number
+
+} elseif ($inventory.ExtraHDDs.Count -gt 0) {
+    
+    # Escenario 1B: Existe un HDD mecánico adicional (Prioridad media)
+    Maximize-Partition
+    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraHDDs[0].Number
+
+} else {
+    
+    # Escenario 2: No hay discos adicionales, particionar el disco del SO
+    Split-SingleOSDisk -DiskNumber $inventory.OSDisk.Number -SizeGB $inventory.OSDisk.SizeGB
+
 }
