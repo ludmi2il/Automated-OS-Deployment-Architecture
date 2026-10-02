@@ -1,9 +1,9 @@
 #!/bin/bash
 # Post-init script para FOG Project
-# Objetivo: Seleccion dinamica (NVMe mas chico > SSD SATA mas chico > HDD)
+# Objetivo: Seleccion dinamica (NVMe mas chico -> SSD SATA mas chico -> HDD)
 
 # ==============================================================================
-# 1. DEFINICIÓN DE FUNCIONES
+# 1. DEFINICION DE FUNCIONES
 # ==============================================================================
 
 get_smallest_nvme() {
@@ -94,7 +94,7 @@ resolve_target_disk() {
         return
     fi
 
-    # 3. Fallback: Disco Mecánico más chico
+    # 3. Fallback: Disco Mecanico mas chico
     target=$(get_smallest_hdd)
     if [[ -n "$target" ]]; then
         echo "$target"
@@ -105,7 +105,7 @@ resolve_target_disk() {
 }
 
 # ==============================================================================
-# 2. LÓGICA PRINCIPAL (WORKFLOW)
+# 2. LOGICA PRINCIPAL (WORKFLOW)
 # ==============================================================================
 
 echo "Iniciando escaneo de hardware de almacenamiento a nivel kernel..."
@@ -113,11 +113,11 @@ echo "Iniciando escaneo de hardware de almacenamiento a nivel kernel..."
 TARGET_DISK=$(resolve_target_disk)
 
 if [[ -n "$TARGET_DISK" ]]; then
-    echo "Disco seleccionado por jerarquía y tamaño mínimo: $TARGET_DISK"
+    echo "Disco seleccionado por jerarquia y tamano minimo: $TARGET_DISK"
     
     # Exportar la variable para que el motor de FOG la procese
     export hd="$TARGET_DISK"
 else
-    echo "ERROR CRÍTICO: No se detectó ningún disco de almacenamiento válido."
+    echo "ERROR CRITICO: No se detecto ningun disco de almacenamiento valido."
     sleep 10
 fi
