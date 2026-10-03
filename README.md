@@ -51,8 +51,8 @@ La lógica de automatización se encuentra dividida en dos dominios principales 
 
 ### 1. Entorno Cliente (`/golden-image/scripts/`)
 Conjunto de utilidades ejecutadas de forma desatendida por el sistema operativo Windows una vez volcada la imagen para orquestar la configuración final del almacenamiento:
-* **`disc-config.ps1`**: Detecta dinámicamente las unidades de almacenamiento secundarias (priorizando SSDs sobre mecánicos) y realiza el particionamiento y formateo automático de forma segura, aislando el disco del sistema operativo.
-* **`redirect-user-folders.ps1`**: Automatiza la modificación del registro de Windows para redirigir las carpetas del perfil de usuario (Documentos, Descargas, Escritorio, etc.) hacia la unidad de almacenamiento secundario configurada en el paso anterior.
+* **`disc-config.ps1`**: Detecta dinámicamente las unidades de almacenamiento secundarias (priorizando SSDs sobre mecánicos) y realiza el particionamiento y formateo automático de forma segura. Replica el estilo de partición del sistema operativo (MBR/GPT) al disco de datos y se adapta a sus restricciones estructurales (como el límite de particiones primarias en MBR) para evitar fallos.
+* **`redirect-user-folders.ps1`**: Automatiza la modificación del registro de Windows (modificando el `NTUSER.DAT` del Default User) para redirigir las carpetas del perfil (Documentos, Descargas, Escritorio, etc.). Ejecuta una validación silenciosa previa: si `disc-config.ps1` determinó que no era seguro crear la unidad secundaria (D:), este script detecta su ausencia y aborta la redirección de forma segura, manteniendo los perfiles intactos en la unidad principal.
 * **`SetupComplete.cmd`**: Script nativo de Windows invocado durante la fase final de Sysprep (OOBE). Se encarga de orquestar la ejecución silenciosa y con privilegios elevados de los scripts de PowerShell, garantizando que el equipo inicie sesión por primera vez con el entorno 100% configurado.
 
 ### 2. Entorno Servidor (`/fog/`)
@@ -65,9 +65,13 @@ Scripts y *hooks* nativos ejecutados por el entorno Linux/PXE de FOG o por el ad
   * **`fog.postinit`**: Script principal de la fase post-init que invoca a `select-disk.sh` y exporta la variable `$hd` hacia el motor de FOG.
 * **`/fog/post-download/`**: Hooks ejecutados *después* del volcado de la imagen. Los scripts de este directorio deben copiarse a **`/images/postdownloadscripts/`** en el servidor FOG.
 
+### 3. Entorno de Preparación (`/golden-image/`)
+Scripts ejecutados dentro de la máquina virtual (Hyper-V) para automatizar el sellado del sistema operativo previo a la captura por red:
+* **`seal-image.ps1`**: Orquestador *Zero-Touch* que inyecta automáticamente los scripts de post-despliegue (`SetupComplete.cmd`, etc.) y el archivo de respuestas (`unattend.xml`) en las rutas nativas de Windows (`Panther`). Ejecuta `sysprep` de forma desatendida y cuenta con un mecanismo de autolimpiado fantasma (`.bat` temporal) para borrar el repositorio clonado y no dejar rastros en la imagen final.
+
 ## 🏗️ Entorno de Construcción (Build Environment)
 
-Para garantizar un sistema base limpio y libre de controladores residuales, la preparación de la **Golden Image** (modo auditoría, Sysprep) y el testing preliminar de los scripts se realizan íntegramente en máquinas virtuales utilizando **Microsoft Hyper-V**. Una vez que la imagen es sellada y capturada por el servidor FOG, se procede al despliegue masivo hacia los equipos físicos (Bare Metal) del taller.
+Para garantizar un sistema base limpio y libre de controladores residuales, la preparación de la **Golden Image** (modo auditoría, Sysprep) y el testing preliminar de los scripts se realizan íntegramente en máquinas virtuales utilizando **Microsoft Hyper-V**. El proceso de sellado de la imagen se encuentra 100% automatizado mediante scripts para evitar errores humanos. Una vez que la imagen es sellada y capturada por el servidor FOG, se procede al despliegue masivo hacia los equipos físicos (Bare Metal) del taller.
 
 ## 🔮 Roadmap y Próximas Mejoras (Next Steps)
 

@@ -1,43 +1,48 @@
 # Procedimiento para Creación de Golden Image (Pre-Sysprep)
 
-Este documento detalla el paso a paso para preparar y generalizar una imagen maestra de Windows (Golden Image) antes de su captura.
+Este documento detalla el paso a paso para preparar y generalizar una imagen maestra de Windows (Golden Image) dentro del entorno virtualizado (Hyper-V) antes de su captura con FOG Project.
 
 ## 1. Bypass de validación para Windows 11 (Opcional)
-*Solo necesario si la imagen es de Windows 11 y se está en un entorno virtual sin TPM 2.0 ni Secure Boot como en este caso que se va a utilizar despliegue por PXE desde FOG Server.*
+*Solo necesario si la imagen es de Windows 11 y el entorno virtual no cuenta con TPM 2.0 ni Secure Boot (requerido para el despliegue posterior vía PXE).*
 
-1. Desactivar el **TPM 2.0** y **Secure Boot** en la configuración de la VM.
+1. Desactivar **TPM 2.0** y **Secure Boot** en la configuración de la máquina virtual.
 2. Al bootear la ISO de instalación, presionar `SHIFT + F10` para abrir CMD y ejecutar `regedit`.
 3. Navegar hasta `HKEY_LOCAL_MACHINE\SYSTEM\Setup` y crear una nueva clave llamada `LabConfig`.
-4. Dentro, crear dos valores **DWORD (32 bits)** en `1`:
+4. Dentro de la clave, crear los siguientes valores **DWORD (32 bits)** en 1:
    - `BypassTPMCheck`
    - `BypassSecureBootCheck`
+   - `BypassRAMCheck`
+   - `BypassCPUCheck`
+   - `BypassStorageCheck`
 
 ## 2. Ingreso en Modo Auditoría (Audit Mode)
-Para entrar con el usuario Administrador una vez instalado Windows, pero **SIN HABER CREADO EL USUARIO**, presionar `CTRL + SHIFT + F3` en la pantalla inicial (OOBE). 
-- En este entorno, instalar todo el software que sea necesario para la imagen.
+Para ingresar con el usuario Administrador nativo **sin crear una cuenta de usuario local**, presionar `CTRL + SHIFT + F3` en la pantalla inicial de configuración (OOBE). 
+- En este entorno, instalar todo el software base requerido para la Golden Image.
 
 ## 3. Desactivación de BitLocker
-Desactivar BitLocker para asegurar que Sysprep pueda preparar la imagen correctamente.
+Asegurar que BitLocker esté completamente desactivado en la unidad principal para evitar fallas durante la generalización de Sysprep y la posterior clonación.
 
 ## 4. Instalación y configuración de FOG Client
-1. Descargar el instalador para Windows de FOG Client desde la web del servidor FOG.
-2. Instalar FOG Client.
-3. Vía CMD (como administrador), ejecutar estos dos comandos para detener y deshabilitar el servicio (será levantado recién cuando termine el `SetupComplete`):
+1. Descargar el instalador de FOG Client desde el panel web del servidor FOG.
+2. Realizar la instalación estándar.
+3. Abrir CMD (como Administrador) y ejecutar los siguientes comandos para detener y deshabilitar el servicio. Este servicio será reactivado automáticamente al finalizar el despliegue mediante el script `SetupComplete.cmd`:
    ```cmd
    net stop FOGService
    sc config FOGService start= disabled
    ```
 
-## 5. Preparación de Scripts
-Copiar el contenido de la carpeta [`scripts`](../../golden-image/scripts) del repositorio al directorio:
-`C:\Windows\Setup\Scripts`
+## 5. Automatización del Sellado (Sysprep & OOBE)
+Los pasos manuales de copiado de archivos y ejecución de Sysprep han sido reemplazados por un proceso automatizado para eliminar el riesgo de error humano.
 
-## 6. Archivo de Configuración Desatendida
-Copiar el XML de configuración desatendida ([`unattend.xml`](../../golden-image/sysprep/unattend.xml)) al directorio:
-`C:\Windows\System32\Sysprep`
+1. Descargar este repositorio (en formato ZIP) y descomprimirlo dentro del entorno de la máquina virtual. **IMPORTANTE:** Eliminar el archivo `.zip` original de la carpeta Descargas de forma permanente (`Shift + Supr`) antes de ejecutar el orquestador para no dejar rastros en la imagen.
+2. Abrir PowerShell, navegar a la carpeta `golden-image` y ejecutar el orquestador aplicando un bypass temporal de políticas de seguridad con:
+   ```powershell
+   powershell.exe -ExecutionPolicy Bypass -File ".\seal-image.ps1"
+   ```
+Este script orquesta el cierre de la imagen:
+   - Inyecta el directorio de scripts de post-despliegue en `C:\Windows\Setup\Scripts`.
+   - Copia el archivo de respuestas (`unattend.xml`) a `C:\Windows\System32\Sysprep\Panther`.
+   - Ejecuta `sysprep.exe` con los parámetros `/generalize /oobe /shutdown` apuntando al XML de forma desatendida.
+   - Elimina automáticamente la carpeta del repositorio para no dejar rastros en el sistema.
 
-## 7. Ejecución de Sysprep
-Ejecutar el siguiente comando en CMD (con privilegios de Administrador) para generalizar y apagar la máquina:
-```cmd
-c:\windows\system32\sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:c:\windows\system32\sysprep\unattend.xml
-```
+> ⚠️ **Nota:** Una vez finalizado el script, la máquina virtual se apagará sola. A partir de este momento, el disco está sellado y listo para ser capturado por FOG. No volver a iniciar la VM a menos que sea directamente por red (PXE) para la captura.
