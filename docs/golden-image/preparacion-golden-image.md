@@ -34,11 +34,10 @@ Asegurar que BitLocker esté completamente desactivado en la unidad principal pa
 ## 5. Automatización del Sellado (Sysprep & OOBE)
 Los pasos manuales de copiado de archivos y ejecución de Sysprep han sido reemplazados por un proceso automatizado para eliminar el riesgo de error humano.
 
-1. Descargar este repositorio (en formato ZIP) y descomprimirlo dentro del entorno de la máquina virtual. **IMPORTANTE:** Eliminar el archivo `.zip` original de la carpeta Descargas de forma permanente (`Shift + Supr`) antes de ejecutar el orquestador para no dejar rastros en la imagen.
-2. Abrir PowerShell, navegar a la carpeta `golden-image` y ejecutar el orquestador aplicando un bypass temporal de políticas de seguridad con:
-   ```powershell
-   powershell.exe -ExecutionPolicy Bypass -File ".\seal-image.ps1"
-   ```
+1. Descargar este repositorio (en formato ZIP) y descomprimirlo.
+2. Eliminar el archivo `.zip` original de forma permanente (`Shift + Supr`).
+3. Entrar a la carpeta `golden-image` y hacer doble clic en el archivo `seal-image-launcher.bat`. El script hará la limpieza final y la máquina virtual se apagará sola.
+
 Este script orquesta el cierre de la imagen:
    - Inyecta el directorio de scripts de post-despliegue en `C:\Windows\Setup\Scripts`.
    - Copia el archivo de respuestas (`unattend.xml`) a `C:\Windows\System32\Sysprep\Panther`.
