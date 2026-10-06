@@ -18,6 +18,29 @@ function Test-Administrator {
     }
 }
 
+function Test-SysprepStatus {
+    if (Get-Process -Name "sysprep" -ErrorAction SilentlyContinue) {
+        throw "Error: Sysprep ya se encuentra en ejecución. Cerralo antes de lanzar el script."
+    }
+}
+
+function Test-BitLockerStatus {
+    $bdeStatus = manage-bde -status C: | Out-String
+    if ($bdeStatus -match "Protection On" -or $bdeStatus -match "Protección activada") {
+        throw "Error: BitLocker se encuentra ACTIVADO en C:. Desencriptá la unidad antes de sellar la imagen."
+    }
+}
+
+function Test-PreflightChecks {
+    Write-Host "Realizando comprobaciones de entorno..." -ForegroundColor Cyan
+    
+    Test-Administrator
+    Test-SysprepStatus
+    Test-BitLockerStatus
+    
+    Write-Host "Todas las comprobaciones pasaron con éxito. El entorno está listo." -ForegroundColor Green
+}
+
 function Get-RepositoryRoot {
     param (
         [string]$ScriptDir
@@ -73,7 +96,7 @@ function Invoke-GhostSysprep {
 # ==============================================================================
 
 try {
-    Test-Administrator
+    Test-PreflightChecks
     Write-Host "Iniciando sellado de Golden Image..." -ForegroundColor Cyan
 
     $ScriptDir = $PSScriptRoot
