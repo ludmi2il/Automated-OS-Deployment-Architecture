@@ -65,9 +65,11 @@ Scripts y *hooks* nativos ejecutados por el entorno Linux/PXE de FOG o por el ad
   * **`fog.postinit`**: Script principal de la fase post-init que invoca a `select-disk.sh` y exporta la variable `$hd` hacia el motor de FOG.
 * **`/fog/post-download/`**: Hooks ejecutados *después* del volcado de la imagen. Los scripts de este directorio deben copiarse a **`/images/postdownloadscripts/`** en el servidor FOG.
 
-### 3. Entorno de Preparación (`/golden-image/`)
+### 3. Entorno de Preparación (/golden-image/)
 Scripts ejecutados dentro de la máquina virtual (Hyper-V) para automatizar el sellado del sistema operativo previo a la captura por red:
-* **`seal-image.ps1`**: Orquestador *Zero-Touch* que inyecta automáticamente los scripts de post-despliegue (`SetupComplete.cmd`, etc.) y el archivo de respuestas (`unattend.xml`) en las rutas nativas de Windows (`Panther`). Ejecuta `sysprep` de forma desatendida y cuenta con un mecanismo de autolimpiado fantasma (`.bat` temporal) para borrar el repositorio clonado y no dejar rastros en la imagen final.
+
+- **`seal-image.ps1`**: Orquestador *Zero-Touch* que ejecuta validaciones previas de entorno (comprobando el estado de BitLocker, procesos Sysprep superpuestos y privilegios de Administrador). Inyecta automáticamente los scripts de post-despliegue (`SetupComplete.cmd`, etc.) y el archivo de respuestas (`unattend.xml`) en las rutas nativas de Windows (`Panther`). Finalmente, lanza Sysprep de forma desatendida mediante un proceso fantasma asíncrono en PowerShell que evade los bloqueos de directorio, garantizando la eliminación absoluta del repositorio clonado sin dejar archivos temporales.
+- **`seal-image-launcher.bat`**: *Wrapper* de ejecución que libera el directorio de trabajo apuntando a la raíz del disco y lanza el orquestador principal bypasseando las políticas de ejecución locales.
 
 ## 🏗️ Entorno de Construcción (Build Environment)
 
