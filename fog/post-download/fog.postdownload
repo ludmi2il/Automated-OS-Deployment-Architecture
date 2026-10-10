@@ -1,0 +1,64 @@
+#!/bin/bash
+# ==============================================================================
+# FOG Post-Download Orchestrator
+# Se ejecuta en FOS (Linux) despues de que Partclone vuelva la imagen al disco.
+# ==============================================================================
+
+. /usr/share/fog/lib/funcs.sh # Carga de funciones nativas de FOG
+
+echo "==================================================="
+echo " INICIANDO FASE DE POST-DOWNLOAD (MODULAR)"
+echo "==================================================="
+
+# osid 9 corresponde a todas las versiones modernas de Windows en FOG
+if [[ "$osid" == "9" ]]; then
+    echo "Sistema Operativo Windows detectado. Preparando sistema de archivos..."
+    
+    MOUNT_POINT="/mnt/windows"
+    mkdir -p $MOUNT_POINT
+    
+    # El motor de FOG ya conoce el disco destino gracias a tu script select-disk.sh (variable $hd)
+    # Iteramos sobre todas las particiones de ese disco para encontrar la que tiene Windows
+    for part in ${hd}*; do
+        # Saltar si la variable es igual al disco entero (ej. /dev/nvme0n1)
+        if [[ "$part" == "$hd" ]]; then continue; fi
+        
+        # Intentar montar la particion de forma silenciosa
+        ntfs-3g -o force,rw $part $MOUNT_POINT 2>/dev/null
+        
+        # Verificar si el montaje fue exitoso Y si existe la carpeta "Windows" (para ignorar la particion EFI o de Recuperacion)
+        if [[ "$?" -eq 0 ]] && [[ -d "${MOUNT_POINT}/Windows" ]]; then
+            echo "-> Particion de Windows localizada y montada en: $part"
+            
+            # ==================================================================
+            # 1. INYECCION DE KMS (.env)
+            # ==================================================================
+            KMS_SCRIPT="${postdownpath}/inject_kms.sh"
+            if [[ -f "$KMS_SCRIPT" ]]; then
+                echo "-> Ejecutando modulo KMS..."
+                # Le pasamos el punto de montaje como argumento al script hijo
+                . $KMS_SCRIPT $MOUNT_POINT
+            else
+                echo "-> [ADVERTENCIA] Modulo inject_kms.sh no encontrado."
+            fi
+            
+            # ==================================================================
+            # Espacio para futuras features de post-download 
+            # ==================================================================
+
+            # Limpieza y desmontaje seguro
+            umount $MOUNT_POINT
+            echo "-> Particion desmontada correctamente."
+            break # Salimos del loop porque ya procesamos la particion principal
+        else
+            # Si se monto pero no era la de Windows (ej. EFI), la desmontamos y seguimos buscando
+            umount $MOUNT_POINT 2>/dev/null
+        fi
+    done
+else
+    echo "OS no es Windows (osid=$osid). Omitiendo scripts de inyeccion."
+fi
+
+echo "==================================================="
+echo " FASE DE POST-DOWNLOAD FINALIZADA"
+echo "==================================================="
