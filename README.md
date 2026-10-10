@@ -53,6 +53,7 @@ La lógica de automatización se encuentra dividida en dos dominios principales 
 Conjunto de utilidades ejecutadas de forma desatendida por el sistema operativo Windows una vez volcada la imagen para orquestar la configuración final del almacenamiento:
 * **`disc-config.ps1`**: Detecta dinámicamente las unidades de almacenamiento secundarias (priorizando SSDs sobre mecánicos) y realiza el particionamiento y formateo automático de forma segura. Replica el estilo de partición del sistema operativo (MBR/GPT) al disco de datos y se adapta a sus restricciones estructurales (como el límite de particiones primarias en MBR) para evitar fallos.
 * **`redirect-user-folders.ps1`**: Automatiza la modificación del registro de Windows (modificando el `NTUSER.DAT` del Default User) para redirigir las carpetas del perfil (Documentos, Descargas, Escritorio, etc.). Ejecuta una validación silenciosa previa: si `disc-config.ps1` determinó que no era seguro crear la unidad secundaria (D:), este script detecta su ausencia y aborta la redirección de forma segura, manteniendo los perfiles intactos en la unidad principal.
+- **`dynamic-activation.ps1`**: Script modular de activación Zero-Touch. Detecta la edición de Windows y prioriza la búsqueda de claves OEM embebidas en la tabla ACPI/MSDM de la BIOS/UEFI. De no existir, instala la GVLK correspondiente y activa el sistema apuntando al servidor KMS inyectado dinámicamente (`kms.env`), con fallback a auto-descubrimiento DNS (SRV).
 * **`SetupComplete.cmd`**: Script nativo de Windows invocado durante la fase final de Sysprep (OOBE). Se encarga de orquestar la ejecución silenciosa y con privilegios elevados de los scripts de PowerShell, garantizando que el equipo inicie sesión por primera vez con el entorno 100% configurado.
 
 ### 2. Entorno Servidor (`/fog/`)
@@ -64,6 +65,8 @@ Scripts y *hooks* nativos ejecutados por el entorno Linux/PXE de FOG o por el ad
   * **`select-disk.sh`**: Escanea el hardware de almacenamiento del cliente a nivel kernel (FOS) y selecciona dinámicamente el disco de destino para la instalación del SO. Utiliza una jerarquía estricta de rendimiento: selecciona el NVMe de menor tamaño primero; si no existe, busca el SSD SATA más chico y, como último recurso, utiliza un HDD mecánico.
   * **`fog.postinit`**: Script principal de la fase post-init que invoca a `select-disk.sh` y exporta la variable `$hd` hacia el motor de FOG.
 * **`/fog/post-download/`**: Hooks ejecutados *después* del volcado de la imagen. Los scripts de este directorio deben copiarse a **`/images/postdownloadscripts/`** en el servidor FOG.
+  * **`fog.postdownload`**: Orquestador principal de la fase post-download. Utiliza la variable `$hd` para iterar sobre el disco destino, localizando y montando de forma segura la partición nativa de Windows. Actúa como base para futuras inyecciones offline en el sistema de archivos.
+  * **`inject-kms.sh`**: Módulo de inyección dinámica. Intercepta el argumento de booteo `kmsserver` inyectado por iPXE en el kernel de FOS Linux y genera al vuelo el archivo `kms.env` dentro de la jerarquía de scripts de Windows (`\Windows\Setup\Scripts`). Esto permite informar al cliente de la IP del servidor KMS sin necesidad de codificarla de forma rígida en la Golden Image.
 
 ### 3. Entorno de Preparación (/golden-image/)
 Scripts ejecutados dentro de la máquina virtual (Hyper-V) para automatizar el sellado del sistema operativo previo a la captura por red:
@@ -78,10 +81,12 @@ Para garantizar un sistema base limpio y libre de controladores residuales, la p
 ## 🔮 Roadmap y Próximas Mejoras (Next Steps)
 
 > 🚧 **Work In Progress (WIP):** Los scripts de automatización se encuentran actualmente en fase de pruebas en el laboratorio virtual y físico. Paralelamente, la arquitectura continuará iterando hacia las siguientes mejoras:
-* **Almacenamiento en Frío (Samba)**
-* **Implementación de FOG Snapins**
-* **Inyección dinámica de Drivers**
-* **Despliegue de FOG Client para integración automatizada con Active Directory**
+
+*   **Estrategia de Redespliegue No Destructivo (Disaster Recovery):** Evolucionar el flujo de clonación para permitir la reinstalación del SO ante fallas críticas, preservando intactos los perfiles de usuario gracias a la arquitectura de separación lógica de datos.
+*   **Inyección Dinámica de Drivers:** Implementar lectura de hardware (DMI/SMBIOS) durante la fase post-download para inyectar controladores específicos, permitiendo mantener una única *Golden Image* verdaderamente agnóstica al hardware.
+*   **Integración con Active Directory:** Desplegar el agente FOG Client de forma desatendida para automatizar el nombrado de equipos y su ingreso a un dominio corporativo.
+*   **Gestión de Software (FOG Snapins):** Centralizar la distribución silenciosa de aplicaciones (MSI/EXE) y la ejecución de scripts adicionales mediante el sistema nativo de Snapins.
+*   **Almacenamiento en Frío (Samba):** Configurar el disco mecánico secundario del servidor como repositorio de red para respaldos históricos y retención a largo plazo de *Golden Images*.
 
 ## 📘 Documentación Técnica
 * [*Gestión de Excepciones PXE y Reservas Kea DHCP*](docs/fog/dhcp-reservations.md)
