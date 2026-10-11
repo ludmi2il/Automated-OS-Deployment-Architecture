@@ -1,70 +1,135 @@
-<#
+﻿<#
 .SYNOPSIS
     Redirección de carpetas de usuario (User Shell Folders)
 .DESCRIPTION
     Modifica el NTUSER.DAT del Default User para redirigir los perfiles a D:\Usuarios.
-    Utiliza RunOnce para la creación dinámica de carpetas y evita bloqueos de Hive.
+    Utiliza reg.exe nativo con expansión diferida (REG_EXPAND_SZ) para evitar bloqueos de Hive.
+.NOTES
+    Author: Ludmila Dosil (@ludmi2il)
 #>
 
-# Comprobar de forma silenciosa si el volumen D: existe en el sistema
-$dataDriveExists = Get-Volume -DriveLetter D -ErrorAction SilentlyContinue | Where-Object { $_.FileSystemLabel -eq 'Datos' -or$_.DriveLetter -eq 'D' }
+$LogFile = "C:\Windows\Logs\Redirect_Folders.log"
 
-if ($null -ne$dataDriveExists) {
-    Write-Output "[INFO] Unidad D: detectada. Iniciando redirección de perfiles..."
+# ==============================================================================
+# 1. DEFINICIÓN DE FUNCIONES Y DATOS
+# ==============================================================================
 
-    # 1. Crear el directorio base si no existe (A nivel sistema)
-    if (-not (Test-Path "D:\Usuarios")) {
-        New-Item -Path "D:\Usuarios" -ItemType Directory -Force | Out-Null
-    }
-
-    # 2. Cargar el hive del Default User
-    # Guardamos la salida para asegurar que se cargó bien antes de seguir
-    $loadResult = & reg load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT" 2>&1
+function Write-Log {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logLine = "[$timestamp] $Message"
     
-    $regPath = "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+    # Escribe en el archivo de log y también en la salida estándar
+    Add-Content -Path $LogFile -Value $logLine -Encoding UTF8 -ErrorAction SilentlyContinue
+    Write-Output $logLine
+}
 
-    # Función que usa reg.exe nativo (sin cmd.exe) para inyectar %USERNAME% de forma literal
-    function Set-ShellFolder {
-        param([string]$Name, [string]$Folder)
-        $targetPath = "D:\Usuarios\%USERNAME%\$Folder"
-        & reg.exe add $regPath /v $Name /t REG_EXPAND_SZ /d $targetPath /f | Out-Null
+function Test-DataDriveAvailable {
+    param([string]$DriveLetter = 'D')
+    
+    $vol = Get-Volume -DriveLetter $DriveLetter -ErrorAction SilentlyContinue | 
+           Where-Object { $_.FileSystemLabel -eq 'Datos' -or $_.DriveLetter -eq $DriveLetter }
+    return ($null -ne $vol)
+}
+
+function Initialize-ProfilesRoot {
+    param([string]$BasePath = "D:\Usuarios")
+    
+    if (-not (Test-Path $BasePath)) {
+        try {
+            New-Item -Path $BasePath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+        }
+        catch {
+            throw "No se pudo crear el directorio raíz '$BasePath'. Detalle: $($_.Exception.Message)"
+        }
+    }
+}
+
+function Get-ShellFolderMappings {
+    return [ordered]@{
+        # A. Carpetas Principales
+        "Desktop"                                = "Desktop"
+        "Personal"                               = "Documents"
+        "{374DE290-123F-4565-9164-39C4925E467B}" = "Downloads"
+
+        # B. Multimedia
+        "My Pictures"                            = "Pictures"
+        "My Video"                               = "Videos"
+        "My Music"                               = "Music"
+
+        # C. Opcionales
+        "Favorites"                              = "Favorites"
+        "{56784854-C6CB-462B-8169-88E350ACB882}" = "Contacts"
+        "{7D1D3A04-DEBB-4115-95CF-2F29DA2920DA}" = "Searches"
+        "{BFB9D5E0-C6A9-404C-B2B2-AE6DB6AF4968}" = "Links"
+        "{31C0DD25-9439-4F12-BF41-7FF4EDA38722}" = "3D Objects"
+    }
+}
+
+function Set-DefaultUserShellFolders {
+    param(
+        [System.Collections.Specialized.OrderedDictionary]$FolderMappings,
+        [string]$BasePath = "D:\Usuarios"
+    )
+
+    $hiveName = "HKU\DefaultUser"
+    $ntUserPath = "C:\Users\Default\NTUSER.DAT"
+    $regPath = "$hiveName\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+
+    if (-not (Test-Path $ntUserPath)) {
+        throw "No se encontró el archivo base en '$ntUserPath'."
     }
 
-    # ==========================================
-    # A. Redirección de Carpetas Principales
-    # ==========================================
-    Set-ShellFolder -Name "Desktop" -Folder "Desktop"
-    Set-ShellFolder -Name "Personal" -Folder "Documents"
-    Set-ShellFolder -Name "{374DE290-123F-4565-9164-39C4925E467B}" -Folder "Downloads"
+    # Cargar el hive del Default User
+    & reg.exe load $hiveName $ntUserPath | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fallo al montar el archivo NTUSER.DAT con reg.exe (ExitCode: $LASTEXITCODE)."
+    }
 
-    # ==========================================
-    # B. Multimedia
-    # ==========================================
-    Set-ShellFolder -Name "My Pictures" -Folder "Pictures"
-    Set-ShellFolder -Name "My Video" -Folder "Videos"
-    Set-ShellFolder -Name "My Music" -Folder "Music"
+    try {
+        foreach ($entry in $FolderMappings.GetEnumerator()) {
+            $targetPath = "$BasePath\%USERNAME%\$($entry.Value)"
+            & reg.exe add $regPath /v $entry.Key /t REG_EXPAND_SZ /d $targetPath /f | Out-Null
+            
+            if ($LASTEXITCODE -ne 0) {
+                throw "Fallo al inyectar la clave '$($entry.Key)' hacia '$targetPath' (ExitCode: $LASTEXITCODE)."
+            }
+        }
+    }
+    finally {
+        # El bloque finally se ejecuta SIEMPRE antes de que el throw suba al catch principal,
+        # garantizando que el NTUSER.DAT nunca quede bloqueado en memoria.
+        [gc]::Collect()
+        [gc]::WaitForPendingFinalizers()
+        & reg.exe unload $hiveName | Out-Null
+    }
+}
 
-    # ==========================================
-    # C. Opcionales
-    # ==========================================
-    Set-ShellFolder -Name "Favorites" -Folder "Favorites"
-    Set-ShellFolder -Name "{56784854-C6CB-462B-8169-88E350ACB882}" -Folder "Contacts"
-    Set-ShellFolder -Name "{7D1D3A04-DEBB-4115-95CF-2F29DA2920DA}" -Folder "Searches"
-    Set-ShellFolder -Name "{BFB9D5E0-C6A9-404C-B2B2-AE6DB6AF4968}" -Folder "Links"
-    Set-ShellFolder -Name "{31C0DD25-9439-4F12-BF41-7FF4EDA38722}" -Folder "3D Objects"
+# ==============================================================================
+# 2. LÓGICA PRINCIPAL (WORKFLOW)
+# ==============================================================================
 
-    # ==========================================
-    # D. Limpieza y Desmontaje Seguro
-    # ==========================================
-    # Forzamos la recolección de basura de .NET por precaución extrema antes del unload
-    [gc]::Collect()
-    [gc]::WaitForPendingFinalizers()
+try {
+    Write-Log "[START] Iniciando script de redirección de carpetas de usuario."
 
-    # Descargar el registro guardando los cambios
-    & reg unload "HKU\DefaultUser" | Out-Null
+    if (Test-DataDriveAvailable -DriveLetter 'D') {
+        Write-Log "[INFO] Unidad D: detectada. Iniciando redirección de perfiles..."
 
-    Write-Output "[OK] Redirección inyectada con éxito."
+        Initialize-ProfilesRoot -BasePath "D:\Usuarios"
+        Write-Log "[INFO] Directorio raíz D:\Usuarios verificado."
+        
+        $mappings = Get-ShellFolderMappings
+        Set-DefaultUserShellFolders -FolderMappings $mappings -BasePath "D:\Usuarios"
 
-} else {
-    Write-Output "[SKIP] Unidad D: no detectada. Se omite la redirección de perfiles (permanecen en C:\)."
+        Write-Log "[OK] Redirección inyectada con éxito en el Default User."
+    } else {
+        Write-Log "[SKIP] Unidad D: no detectada. Se omite la redirección de perfiles (permanecen en C:\)."
+    }
+}
+catch {
+    Write-Log "[ERROR CRÍTICO] La redirección de perfiles falló: $($_.Exception.Message)"
+    exit 1
 }
