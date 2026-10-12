@@ -7,8 +7,8 @@ powershell.exe -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\disc-conf
 :: Redirección de la carpeta de usuario default a la partición de Datos
 powershell.exe -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\redirect-user-folders.ps1"
 
-:: Activa el Windows por KMS
-:: call "C:\Windows\Setup\Scripts\Activar Windows 11 Pro.bat"
+:: Activa el Windows 
+powershell.exe -ExecutionPolicy Bypass -File "C:\Windows\Setup\Scripts\dynamic-activation.ps1"
 
 :: Despierta al cliente FOG por si queda algo para instalar
 sc config FOGService start= auto
