@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     KMS Dynamic Auto-Activation Script (Modular)
 .DESCRIPTION
