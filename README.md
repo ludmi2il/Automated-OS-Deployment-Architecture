@@ -66,7 +66,7 @@ Scripts y *hooks* nativos ejecutados por el entorno Linux/PXE de FOG o por el ad
   * **`fog.postinit`**: Script principal de la fase post-init que invoca a `select-disk.sh` y exporta la variable `$hd` hacia el motor de FOG.
 * **`/fog/post-download/`**: Hooks ejecutados *después* del volcado de la imagen. Los scripts de este directorio deben copiarse a **`/images/postdownloadscripts/`** en el servidor FOG.
   * **`fog.postdownload`**: Orquestador principal de la fase post-download. Utiliza la variable `$hd` para iterar sobre el disco destino, localizando y montando de forma segura la partición nativa de Windows. Actúa como base para futuras inyecciones offline en el sistema de archivos.
-  * **`inject-kms.sh`**: Módulo de inyección dinámica. Intercepta el argumento de booteo `kmsserver` inyectado por iPXE en el kernel de FOS Linux y genera al vuelo el archivo `kms.env` dentro de la jerarquía de scripts de Windows (`\Windows\Setup\Scripts`). Esto permite informar al cliente de la IP del servidor KMS sin necesidad de codificarla de forma rígida en la Golden Image.
+  * **`inject-kms.sh`**: Módulo de inyección dinámica. Intercepta el argumento de booteo `kmsserver` inyectado por iPXE en el kernel de FOS Linux y genera al vuelo el archivo `kms.env` dentro de la jerarquía de scripts de Windows (`\Windows\Setup\Scripts`). Esto permite informar al cliente de la IP del servidor KMS sin necesidad de codificarla de forma rígida en la Golden Image. 👉 *[Ver documentación y uso aquí](docs/fog/kms-configuration.md)*
 
 ### 3. Entorno de Preparación (/golden-image/)
 Scripts ejecutados dentro de la máquina virtual (Hyper-V) para automatizar el sellado del sistema operativo previo a la captura por red:
@@ -90,6 +90,7 @@ Para garantizar un sistema base limpio y libre de controladores residuales, la p
 
 ## 📘 Documentación Técnica
 * [*Gestión de Excepciones PXE y Reservas Kea DHCP*](docs/fog/dhcp-reservations.md)
+* [*Configuración e Inyección del Servidor KMS en FOG Project*](docs/fog/kms-configuration.md)
 * [*Procedimiento de creación y generalización de la Golden Image*](docs/golden-image/preparacion-golden-image.md)
 * [*Estructura del archivo unattend.xml*](golden-image/sysprep/unattend.xml)
 * [*Registro de Compatibilidad de Hardware y Booteo PXE*](docs/hardware/compatibilidad-pxe.md)
