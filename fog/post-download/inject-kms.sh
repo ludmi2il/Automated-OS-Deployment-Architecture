@@ -11,13 +11,23 @@ echo "   [KMS] Buscando directorio de trabajo en: $SCRIPTS_DIR"
 
 if [[ -d "$SCRIPTS_DIR" ]]; then
     ENV_FILE="${SCRIPTS_DIR}/kms.env"
-    KMS_SERVER=""
+    
+    # 1. Buscar en variables de entorno locales (util en modo Debug manual)
+    KMS_SERVER="${kmsserver:-${KMS_SERVER:-${kms_server:-}}}"
     
     # Leemos los argumentos que iPXE le paso al kernel de Linux al bootear
     for arg in $(cat /proc/cmdline); do
-        if [[ $arg == kmsserver=* ]]; then
-            # Extraemos lo que esta despues del signo igual
-            KMS_SERVER="${arg#*=}"
+        if [[ "$arg" == *=* ]]; then
+            KEY="${arg%%=*}"          # Todo lo que esta ANTES del '='
+            VAL="${arg#*=}"           # Todo lo que esta DESPUES del '='
+            
+            # Pasamos KEY a minusculas (${KEY,,})
+            KEY_CLEAN="${KEY,,}"
+            KEY_CLEAN="${KEY_CLEAN//[_-]/}" # Limpia tanto guion bajo (_) como guion medio (-)
+            
+            if [[ "$KEY_CLEAN" == "kmsserver" ]]; then
+                KMS_SERVER="$VAL"
+            fi
         fi
     done
     
