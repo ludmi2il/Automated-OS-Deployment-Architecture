@@ -33,7 +33,7 @@ if [[ "$osid" == "9" ]]; then
             # ==================================================================
             # 1. INYECCION DE KMS (.env)
             # ==================================================================
-            KMS_SCRIPT="${postdownpath}/inject-kms.sh"
+            KMS_SCRIPT="${postdownpath}inject-kms.sh"
             if [[ -f "$KMS_SCRIPT" ]]; then
                 echo "-> Ejecutando modulo KMS..."
                 # Le pasamos el punto de montaje como argumento al script hijo
