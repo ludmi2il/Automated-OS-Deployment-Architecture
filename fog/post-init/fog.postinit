@@ -1,5 +1,8 @@
 #!/bin/bash
 
-
+# 1. Resolver en qué disco vamos a instalar (inyectando variables al entorno)
 echo "Llamando al script de seleccion de disco..."
 source ${postinitpath}select-disk.sh
+
+# 2. Respaldar la tabla de particiones de ese disco si corresponde
+source "${postinitpath}disaster-recovery.sh"
