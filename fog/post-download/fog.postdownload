@@ -12,6 +12,10 @@ echo "==================================================="
 
 # osid 9 corresponde a todas las versiones modernas de Windows en FOG
 if [[ "$osid" == "9" ]]; then
+
+    # Verificamos si existe un backup de la particion de Datos Locales en RAM y lo restauramos si corresponde
+    . "${postdownpath}restore-partition.sh"
+
     echo "Sistema Operativo Windows detectado. Preparando sistema de archivos..."
     
     MOUNT_POINT="/mnt/windows"
