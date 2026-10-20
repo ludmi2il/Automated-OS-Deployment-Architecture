@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# ==============================================================================
+# FILTRO DE TAREA: EJECUTAR UNICAMENTE EN DESPLIEGUES (type=down)
+# ==============================================================================
+if [[ "$type" != "down" && "$type" != "deploy" ]] && ! grep -qE "(type=down|type=deploy|mode=down)" /proc/cmdline; then
+    echo "-> [POST-INIT] Tarea actual no es un despliegue (type='$type'). Omitiendo seleccion de disco y backup."
+    return 0 2>/dev/null || exit 0
+fi
+
 # 1. Resolver en qué disco vamos a instalar (inyectando variables al entorno)
 echo "Llamando al script de seleccion de disco..."
 source ${postinitpath}select-disk.sh
