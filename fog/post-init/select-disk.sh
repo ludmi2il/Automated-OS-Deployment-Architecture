@@ -10,6 +10,34 @@
 # 60 GiB convertidos a sectores de 512 bytes (125.829.120 sectores)
 MIN_SECTORS=$((60 * 1024 * 1024 * 2))
 
+is_safe_target() {
+    local disk=$1
+    
+    # 0. Override Destructivo
+    if [[ "$WIPE_DATA" == "true" ]] || grep -qE "WIPE_DATA=true" /proc/cmdline; then
+        echo "-> [FILTRO] ADVERTENCIA: WIPE_DATA=true detectado. Forzando seleccion destructiva en $disk." > /dev/console
+        return 0
+    fi
+
+    # OPTIMIZACION: Hacemos una sola consulta de I/O al hardware y la guardamos en RAM
+    local disk_info
+    disk_info=$(blkid ${disk}* 2>/dev/null)
+
+    # 1. Buscamos si existe la particion de datos
+    if ! echo "$disk_info" | grep -iq 'LABEL="Datos Locales"'; then
+        return 0 # No tiene Datos Locales, es seguro
+    fi
+    
+    # 2. Si la tiene, verificamos si es Hibrido
+    if echo "$disk_info" | grep -iqE '(TYPE="vfat"|System Reserved)'; then
+        return 0 # Es el disco del SO hibrido, es seguro
+    fi
+    
+    # 3. Disco secundario dedicado
+    echo "-> [FILTRO] Omitiendo $disk: Es un disco secundario exclusivo de Datos." > /dev/console
+    return 1
+}
+
 get_smallest_nvme() {
     local min_size=-1
     local target_disk=""
@@ -17,11 +45,13 @@ get_smallest_nvme() {
     for dev in /sys/block/nvme[0-9]n[0-9]*; do
         if [[ -d "$dev" ]]; then
             local size=$(cat "$dev/size" 2>/dev/null)
-            # Verificamos que tenga tamano y supere los 60 GiB
             if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
-                if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
-                    min_size=$size
-                    target_disk="/dev/$(basename "$dev")"
+                # NUEVA CLAUSULA: Evaluamos si el disco es un objetivo seguro
+                if is_safe_target "/dev/$(basename "$dev")"; then
+                    if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
+                        min_size=$size
+                        target_disk="/dev/$(basename "$dev")"
+                    fi
                 fi
             fi
         fi
@@ -36,18 +66,19 @@ get_smallest_sata_ssd() {
 
     for dev in /sys/block/sd*; do
         if [[ -d "$dev" ]]; then
-            # Saltear unidades removibles (Pendrives, SD)
             local removable=$(cat "$dev/removable" 2>/dev/null)
             [[ "$removable" -eq 1 ]] && continue 
 
             local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
             if [[ "$rotational" -eq 0 ]]; then
                 local size=$(cat "$dev/size" 2>/dev/null)
-                # Verificamos que tenga tamano y supere los 60 GiB
                 if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
-                    if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
-                        min_size=$size
-                        target_disk="/dev/$(basename "$dev")"
+                    # NUEVA CLAUSULA: Evaluamos si el disco es un objetivo seguro
+                    if is_safe_target "/dev/$(basename "$dev")"; then
+                        if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
+                            min_size=$size
+                            target_disk="/dev/$(basename "$dev")"
+                        fi
                     fi
                 fi
             fi
@@ -63,18 +94,19 @@ get_smallest_hdd() {
 
     for dev in /sys/block/sd*; do
         if [[ -d "$dev" ]]; then
-            # Saltear unidades removibles
             local removable=$(cat "$dev/removable" 2>/dev/null)
             [[ "$removable" -eq 1 ]] && continue 
 
             local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
             if [[ "$rotational" -eq 1 ]]; then
                 local size=$(cat "$dev/size" 2>/dev/null)
-                # Verificamos que tenga tamano y supere los 60 GiB
                 if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
-                    if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
-                        min_size=$size
-                        target_disk="/dev/$(basename "$dev")"
+                    # NUEVA CLAUSULA: Evaluamos si el disco es un objetivo seguro
+                    if is_safe_target "/dev/$(basename "$dev")"; then
+                        if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
+                            min_size=$size
+                            target_disk="/dev/$(basename "$dev")"
+                        fi
                     fi
                 fi
             fi
