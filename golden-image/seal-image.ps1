@@ -174,7 +174,7 @@ function Invoke-GhostSysprep {
         [string]$RepoRoot
     )
     
-    $GhostCommand = "Start-Sleep -Seconds 3; Remove-Item -LiteralPath '$RepoRoot' -Recurse -Force; C:\Windows\System32\Sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:C:\Windows\System32\Sysprep\Panther\unattend.xml"
+    $GhostCommand = "Start-Sleep -Seconds 3; Remove-Item -LiteralPath '$RepoRoot.zip' -Recurse -Force; Remove-Item -LiteralPath '$RepoRoot' -Recurse -Force; C:\Windows\System32\Sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:C:\Windows\System32\Sysprep\Panther\unattend.xml"
 
     # Obligamos al proceso oculto a nacer en C:\ para que no bloquee la carpeta
     Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden -Command `"$GhostCommand`"" -WorkingDirectory "C:\"
