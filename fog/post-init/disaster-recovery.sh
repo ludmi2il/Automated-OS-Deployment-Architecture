@@ -3,8 +3,8 @@
 # Objetivo: Backup preventivo de tabla de particiones en NFS
 
 # Abortar si el modulo anterior fallo y no hay disco seleccionado
-if [[ -z "$hd" ]]; then
-    echo "-> [DISASTER RECOVERY] Abortado: No hay disco de destino definido (\$hd vacio)."
+if [[ -z "$fdrive" ]]; then
+    echo "-> [DISASTER RECOVERY] Abortado: No hay disco de destino definido (\$fdrive vacio)."
     return
 fi
 
@@ -34,7 +34,7 @@ manage_partition_state() {
     mkdir -p "$mnt_dir"
 
     echo "-> Montando recurso NFS (RW) desde FOG..."
-    mount -o nolock,proto=tcp,rsize=32768,wsize=32768 ${storage}:/images/dev "$mnt_dir"
+    mount -o nolock,proto=tcp,rsize=32768,wsize=32768 ${storageip}:/images/dev "$mnt_dir"
     
     # Si se asigna en Host Custom Variables (WIPE_DATA="true"), eliminamos cualquier backup previo en NFS y forzamos un despliegue totalmente destructivo
     if [[ $WIPE_DATA == "true" ]]; then
@@ -78,5 +78,5 @@ manage_partition_state() {
 # 2. EJECUCION PRINCIPAL (WORKFLOW)
 # ==============================================================================
 
-# Llamamos a la funcion pasandole la variable global $hd definida en select-disk.sh
-manage_partition_state "$hd"
+# Llamamos a la funcion pasandole la variable global $fdrive definida en select-disk.sh
+manage_partition_state "$fdrive"

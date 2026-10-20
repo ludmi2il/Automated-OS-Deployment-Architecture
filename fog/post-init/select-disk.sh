@@ -116,7 +116,9 @@ if [[ -n "$TARGET_DISK" ]]; then
     echo "Disco seleccionado por jerarquia y tamano minimo: $TARGET_DISK"
     
     # Exportar la variable para que el motor de FOG la procese
-    export hd="$TARGET_DISK"
+    export fdrive="$TARGET_DISK"
+    #
+
 else
     echo "ERROR CRITICO: No se detecto ningun disco de almacenamiento valido."
     sleep 10
