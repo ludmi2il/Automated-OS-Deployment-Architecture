@@ -122,7 +122,7 @@ function Install-OfficePreSysprep {
     Invoke-WebRequest -Uri $OdtUrl -OutFile $InstallerExe -UseBasicParsing -ErrorAction Stop
 
     Write-Host "Extrayendo setup.exe..." -ForegroundColor Cyan
-    Start-Process -FilePath $InstallerExe -ArgumentList "/quiet /extract:`"$TempFolder`"" -Wait
+    Start-Process -FilePath $InstallerExe -ArgumentList "/quiet /extract:`"$TempFolder`"" -Wait -NoNewWindow
 
     # Verificamos que la extracción haya generado el setup.exe
     if (-not (Test-Path $SetupExe)) {
@@ -130,7 +130,7 @@ function Install-OfficePreSysprep {
     }
 
     Write-Host "Instalando Office..." -ForegroundColor Cyan
-    Start-Process -FilePath $SetupExe -ArgumentList "/configure `"$XmlPath`"" -Wait
+    Start-Process -FilePath $SetupExe -ArgumentList "/configure `"$XmlPath`"" -Wait -NoNewWindow
 
     Write-Host "Limpiando archivos temporales..." -ForegroundColor Green
     Remove-Item -Path $TempFolder -Recurse -Force -ErrorAction SilentlyContinue
@@ -194,7 +194,7 @@ try {
     Write-Host "Inyectando cargas útiles en el sistema..."
     Copy-Payloads -ScriptDir $ScriptDir
 
-    $OfficeXmlPath = Join-Path -Path $RepoRoot -ChildPath "office\config.xml"
+    $OfficeXmlPath = Join-Path -Path $ScriptDir -ChildPath "office\configuration.xml"
     Install-OfficePreSysprep -XmlPath $OfficeXmlPath
     
     Install-ChocolateyPreSysprep
