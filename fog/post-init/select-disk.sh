@@ -1,10 +1,14 @@
 #!/bin/bash
 # Post-init script para FOG Project
 # Objetivo: Seleccion dinamica (NVMe mas chico -> SSD SATA mas chico -> HDD)
+# Filtro: Solo discos >= 60 GiB
 
 # ==============================================================================
-# 1. DEFINICION DE FUNCIONES
+# 1. DEFINICION DE FUNCIONES Y LIMITES
 # ==============================================================================
+
+# 60 GiB convertidos a sectores de 512 bytes (125.829.120 sectores)
+MIN_SECTORS=$((60 * 1024 * 1024 * 2))
 
 get_smallest_nvme() {
     local min_size=-1
@@ -13,7 +17,8 @@ get_smallest_nvme() {
     for dev in /sys/block/nvme[0-9]n[0-9]*; do
         if [[ -d "$dev" ]]; then
             local size=$(cat "$dev/size" 2>/dev/null)
-            if [[ -n "$size" ]]; then
+            # Verificamos que tenga tamano y supere los 60 GiB
+            if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
                 if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
                     min_size=$size
                     target_disk="/dev/$(basename "$dev")"
@@ -38,7 +43,8 @@ get_smallest_sata_ssd() {
             local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
             if [[ "$rotational" -eq 0 ]]; then
                 local size=$(cat "$dev/size" 2>/dev/null)
-                if [[ -n "$size" ]]; then
+                # Verificamos que tenga tamano y supere los 60 GiB
+                if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
                     if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
                         min_size=$size
                         target_disk="/dev/$(basename "$dev")"
@@ -64,7 +70,8 @@ get_smallest_hdd() {
             local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
             if [[ "$rotational" -eq 1 ]]; then
                 local size=$(cat "$dev/size" 2>/dev/null)
-                if [[ -n "$size" ]]; then
+                # Verificamos que tenga tamano y supere los 60 GiB
+                if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
                     if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
                         min_size=$size
                         target_disk="/dev/$(basename "$dev")"
@@ -113,13 +120,11 @@ echo "Iniciando escaneo de hardware de almacenamiento a nivel kernel..."
 TARGET_DISK=$(resolve_target_disk)
 
 if [[ -n "$TARGET_DISK" ]]; then
-    echo "Disco seleccionado por jerarquia y tamano minimo: $TARGET_DISK"
+    echo "Disco seleccionado por jerarquia y tamano minimo (>= 60GB): $TARGET_DISK"
     
-    # Exportar la variable para que el motor de FOG la procese
+    # Exportamos fdrive para forzar a que la funcion nativa de FOG respete este disco
     export fdrive="$TARGET_DISK"
-    #
-
 else
-    echo "ERROR CRITICO: No se detecto ningun disco de almacenamiento valido."
+    echo "ERROR CRITICO: No se detecto ningun disco de almacenamiento valido mayor a 60GB."
     sleep 10
 fi
