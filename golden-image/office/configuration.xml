@@ -1,0 +1,25 @@
+<Configuration>
+
+	<Add officeClientEdition="64" Channel="PerpetualVL2021">
+		<Product ID="ProPlus2021Volume" PIDKEY="FXYTK-NJJ8C-GB6DW-3DYQT-6F7TH">
+			<Language ID="es-es" />
+		</Product>
+	</Add>
+	<RemoveMSI />
+	<Updates Enabled="FALSE" />
+
+    <!-- Directivas para la instalacion silenciosa (Zero-Touch) -->
+	<Display Level="None" AcceptEULA="TRUE" />
+	<Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />
+
+	<!-- Desactiva las Experiencias Conectadas de Office -->
+	<AppSettings>
+		<User Key="software/policies/microsoft/office/16.0/common/privacy" 
+		      Name="disconnectedstate" 
+		      Value="2" 
+		      Type="REG_DWORD" 
+		      App="office16" 
+		      Id="L_DisconnectedState" />
+	</AppSettings>
+
+</Configuration>
