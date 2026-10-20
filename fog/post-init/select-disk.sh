@@ -43,17 +43,20 @@ get_smallest_nvme() {
     local target_disk=""
 
     for dev in /sys/block/nvme[0-9]n[0-9]*; do
-        if [[ -d "$dev" ]]; then
-            local size=$(cat "$dev/size" 2>/dev/null)
-            if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
-                # NUEVA CLAUSULA: Evaluamos si el disco es un objetivo seguro
-                if is_safe_target "/dev/$(basename "$dev")"; then
-                    if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
-                        min_size=$size
-                        target_disk="/dev/$(basename "$dev")"
-                    fi
-                fi
-            fi
+        # 1. Ignorar si no es un directorio valido
+        [[ ! -d "$dev" ]] && continue
+        
+        # 2. Ignorar si no tiene tamaño o es menor a 60GB
+        local size=$(cat "$dev/size" 2>/dev/null)
+        [[ -z "$size" || "$size" -lt $MIN_SECTORS ]] && continue
+        
+        # 3. Ignorar si es un disco exclusivo de datos
+        is_safe_target "/dev/$(basename "$dev")" || continue
+        
+        # Si paso todos los filtros, evaluamos si es el mas chico
+        if [[ $min_size -eq -1 || $size -lt $min_size ]]; then
+            min_size=$size
+            target_disk="/dev/$(basename "$dev")"
         fi
     done
 
@@ -65,23 +68,27 @@ get_smallest_sata_ssd() {
     local target_disk=""
 
     for dev in /sys/block/sd*; do
-        if [[ -d "$dev" ]]; then
-            local removable=$(cat "$dev/removable" 2>/dev/null)
-            [[ "$removable" -eq 1 ]] && continue 
+        [[ ! -d "$dev" ]] && continue
+        
+        # 1. Ignorar unidades removibles (USB/SD)
+        local removable=$(cat "$dev/removable" 2>/dev/null)
+        [[ "$removable" -eq 1 ]] && continue 
 
-            local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
-            if [[ "$rotational" -eq 0 ]]; then
-                local size=$(cat "$dev/size" 2>/dev/null)
-                if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
-                    # NUEVA CLAUSULA: Evaluamos si el disco es un objetivo seguro
-                    if is_safe_target "/dev/$(basename "$dev")"; then
-                        if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
-                            min_size=$size
-                            target_disk="/dev/$(basename "$dev")"
-                        fi
-                    fi
-                fi
-            fi
+        # 2. Ignorar si es mecanico (rotational=1)
+        local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
+        [[ "$rotational" -eq 1 ]] && continue 
+
+        # 3. Ignorar tamaño insuficiente
+        local size=$(cat "$dev/size" 2>/dev/null)
+        [[ -z "$size" || "$size" -lt $MIN_SECTORS ]] && continue
+        
+        # 4. Ignorar si es inseguro
+        is_safe_target "/dev/$(basename "$dev")" || continue
+        
+        # Asignacion
+        if [[ $min_size -eq -1 || $size -lt $min_size ]]; then
+            min_size=$size
+            target_disk="/dev/$(basename "$dev")"
         fi
     done
 
@@ -93,23 +100,27 @@ get_smallest_hdd() {
     local target_disk=""
 
     for dev in /sys/block/sd*; do
-        if [[ -d "$dev" ]]; then
-            local removable=$(cat "$dev/removable" 2>/dev/null)
-            [[ "$removable" -eq 1 ]] && continue 
+        [[ ! -d "$dev" ]] && continue
+        
+        # 1. Ignorar unidades removibles (USB/SD)
+        local removable=$(cat "$dev/removable" 2>/dev/null)
+        [[ "$removable" -eq 1 ]] && continue 
 
-            local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
-            if [[ "$rotational" -eq 1 ]]; then
-                local size=$(cat "$dev/size" 2>/dev/null)
-                if [[ -n "$size" ]] && [[ "$size" -ge $MIN_SECTORS ]]; then
-                    # NUEVA CLAUSULA: Evaluamos si el disco es un objetivo seguro
-                    if is_safe_target "/dev/$(basename "$dev")"; then
-                        if [[ $min_size -eq -1 ]] || [[ $size -lt $min_size ]]; then
-                            min_size=$size
-                            target_disk="/dev/$(basename "$dev")"
-                        fi
-                    fi
-                fi
-            fi
+        # 2. Ignorar si NO es mecanico (rotational=0)
+        local rotational=$(cat "$dev/queue/rotational" 2>/dev/null)
+        [[ "$rotational" -eq 0 ]] && continue 
+
+        # 3. Ignorar tamaño insuficiente
+        local size=$(cat "$dev/size" 2>/dev/null)
+        [[ -z "$size" || "$size" -lt $MIN_SECTORS ]] && continue
+        
+        # 4. Ignorar si es inseguro
+        is_safe_target "/dev/$(basename "$dev")" || continue
+        
+        # Asignacion
+        if [[ $min_size -eq -1 || $size -lt $min_size ]]; then
+            min_size=$size
+            target_disk="/dev/$(basename "$dev")"
         fi
     done
 
