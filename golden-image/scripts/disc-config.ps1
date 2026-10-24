@@ -142,21 +142,26 @@ Remove-RecoveryPartition
 try {
     Write-Host "-> Iniciando configuración de almacenamiento"
     Remove-RecoveryPartition
-    
-    # Evalúa si FOS inyectó datos
+   
+    # 1. Evaluar la existencia del archivo bandera
+    $WipeData = Test-Path "C:\Windows\Setup\Scripts\WIPE_DATA_FLAG"
+
+    # 2. Evaluar estado real vs orden del administrador
     $dataVol = Get-Volume | Where-Object { $_.FileSystemLabel -eq "Datos Locales" }
 
-    if ($dataVol) {
+    if ($dataVol -and -not $WipeData) {
         Write-Host "-> [MODO RECUPERACION] Partición retenida por FOG detectada."
         if ($dataVol.DriveLetter -ne 'D') {
             Clear-DriveLetter -Letter 'D'
             Get-Partition -Volume $dataVol | Set-Partition -NewDriveLetter D -ErrorAction SilentlyContinue
         }
-        # Expande el SO hasta el muro de la partición D:
         Maximize-Partition -DriveLetter 'C'
     } else {
+        if ($dataVol -and $WipeData) {
+            Write-Host "-> [WIPE_DATA] Ignorando retención. Forzando formato destructivo en disco secundario."
+        }
+       
         Clear-DriveLetter
-        # Mapear todo el hardware disponible
         $inventory = Get-StorageInventory
 
         # Procesar según los escenarios de hardware
