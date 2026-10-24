@@ -13,27 +13,36 @@ MIN_SECTORS=$((60 * 1024 * 1024 * 2))
 is_safe_target() {
     local disk=$1
     
-    # 0. Override Destructivo
+    # 0. Override Destructivo manual o por kernel cmdline
     if [[ "$WIPE_DATA" == "true" ]] || grep -qE "WIPE_DATA=true" /proc/cmdline; then
-        echo "-> [FILTRO] ADVERTENCIA: WIPE_DATA=true detectado. Forzando seleccion destructiva en $disk." > /dev/console
+        echo "-> [FILTRO] ADVERTENCIA: WIPE_DATA=true. Forzando seleccion destructiva en $disk." > /dev/console
         return 0
     fi
 
-    # OPTIMIZACION: Hacemos una sola consulta de I/O al hardware y la guardamos en RAM
-    local disk_info
+    # 1. Guardamos la salida de las herramientas en RAM (optimización I/O en FOG)
+    local disk_info lsblk_info sfdisk_info
     disk_info=$(blkid ${disk}* 2>/dev/null)
-
-    # 1. Buscamos si existe la particion de datos
-    if ! echo "$disk_info" | grep -iq 'LABEL="Datos Locales"'; then
-        return 0 # No tiene Datos Locales, es seguro
+    lsblk_info=$(lsblk -no LABEL,TYPE,FSTYPE "$disk" 2>/dev/null)
+    
+    # Si no existe "Datos Locales", es un disco de sistema normal y seguro de sobreescribir
+    if ! echo -e "${disk_info}\n${lsblk_info}" | grep -iq 'Datos Locales'; then
+        return 0 
     fi
     
-    # 2. Si la tiene, verificamos si es Hibrido
-    if echo "$disk_info" | grep -iqE '(TYPE="vfat"|System Reserved)'; then
-        return 0 # Es el disco del SO hibrido, es seguro
+    # 2. CAPA ETIQUETAS: Regex multi-idioma (Inglés/Español) y firmas del SO
+    local boot_patterns='(TYPE="vfat"|vfat|[Ss]ystem [Rr]eserved|[Rr]eservado|[Bb]oot|Windows|msftdata)'
+    if echo -e "${disk_info}\n${lsblk_info}" | grep -iqE "$boot_patterns"; then
+        return 0 # Híbrido detectado por etiqueta o filesystem (ej. FAT32 para UEFI)
     fi
     
-    # 3. Disco secundario dedicado
+    # 3. CAPA TABLA DE PARTICIONES: Leemos con sfdisk (nativo en FOG)
+    # Busca la marca 'bootable' (MBR) o el UUID estándar de la partición EFI System (GPT)
+    sfdisk_info=$(sfdisk -d "$disk" 2>/dev/null)
+    if echo "$sfdisk_info" | grep -iqE '(bootable|C12A7328-F81F-11D2-BA4B-00A0C93EC93B)'; then
+        return 0 # Híbrido detectado por flags de arranque
+    fi
+    
+    # 4. Es un disco secundario puro
     echo "-> [FILTRO] Omitiendo $disk: Es un disco secundario exclusivo de Datos." > /dev/console
     return 1
 }
