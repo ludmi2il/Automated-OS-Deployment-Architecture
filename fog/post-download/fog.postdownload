@@ -33,7 +33,6 @@ if [[ "$osid" == "9" ]]; then
         # Verificar si el montaje fue exitoso Y si existe la carpeta "Windows" (para ignorar la particion EFI o de Recuperacion)
         if [[ "$?" -eq 0 ]] && [[ -d "${MOUNT_POINT}/Windows" ]]; then
             echo "-> Particion de Windows localizada y montada en: $part"
-            
             # ==================================================================
             # 1. INYECCION DE KMS (.env)
             # ==================================================================
@@ -45,6 +44,13 @@ if [[ "$osid" == "9" ]]; then
             else
                 echo "-> [ADVERTENCIA] Modulo inject_kms.sh no encontrado."
             fi
+            # Creacion del archivo banera WIPE_DATA_FLAG si corresponde (para que PowerShell lo detecte y ejecute la limpieza de datos)
+            # To-do: unificar toda la configuracion en un .env
+            if grep -qE "wipedata=true|WIPE_DATA=true" /proc/cmdline; then
+                touch "${MOUNT_POINT}/Windows/Setup/Scripts/WIPE_DATA_FLAG"
+                echo "-> [WIPE_DATA] Archivo bandera inyectado para PowerShell."
+            fi
+
             
             # ==================================================================
             # Espacio para futuras features de post-download 
