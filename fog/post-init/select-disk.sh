@@ -177,6 +177,18 @@ if [[ -n "$TARGET_DISK" ]]; then
     # Exportamos fdrive para forzar a que la funcion nativa de FOG respete este disco
     export fdrive="$TARGET_DISK"
 else
-    echo "ERROR CRITICO: No se detecto ningun disco de almacenamiento valido mayor a 60GB."
-    sleep 10
+    echo -e "\n======================================================================="
+    echo " ERROR CRITICO: No se detecto ningun disco valido mayor a 60GB."
+    echo " El hardware de almacenamiento esta ausente, dañado o protegido."
+    echo " El despliegue no puede continuar. Apagando el equipo en 30 segundos..."
+    echo -e "=======================================================================\n"
+    
+    sleep 30
+
+    # Sincronizar discos por seguridad
+    sync
+
+    # 3. Forzar apagado directo saltando el gestor init
+    poweroff -f 2>/dev/null
+    halt -f -p 2>/dev/null
 fi
