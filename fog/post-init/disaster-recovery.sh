@@ -43,7 +43,7 @@ manage_partition_state() {
     # ==========================================================================
     # 3. Garantiza el desmontaje automatico de NFS sin importar por donde salgamos
     # ==========================================================================
-    trap 'umount "$mnt_dir" 2>/dev/null; echo "-> [SISTEMA] Recurso NFS desmontado de forma segura."' RETURN EXIT
+    trap 'umount "$mnt_dir" 2>/dev/null && echo "-> [SISTEMA] Recurso NFS desmontado de forma segura."; trap - RETURN' RETURN
 
     # 3A. OVERRIDE DESTRUCTIVO
     if [[ "$WIPE_DATA" == "true" ]] || grep -qE "WIPE_DATA=true" /proc/cmdline; then
@@ -56,7 +56,7 @@ manage_partition_state() {
     # 3B. ESTADO SANO
     if [[ -n "$DATOS_PART" ]]; then
         echo "-> [ESTADO SANO] Particion 'Datos Locales' detectada en $DATOS_PART."
-        sfdisk -d $target_disk | grep "^${DATOS_PART}[[:space:]]" > "$backup_ram"
+        sfdisk -d $target_disk | grep "^${DATOS_PART}[[:space:]]" | awk -F: '{print $2}' > "$backup_ram"
         cp "$backup_ram" "$backup_nfs"
         
         export PART_BACKUP_EXISTS="true"
