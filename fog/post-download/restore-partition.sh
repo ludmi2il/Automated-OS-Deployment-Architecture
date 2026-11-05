@@ -19,7 +19,7 @@ restore_from_memory() {
                 # Obligamos al kernel de Linux a releer la tabla actualizada
                 sync
                 partprobe $hd 2>/dev/null || blockdev --rereadpt $hd 2>/dev/null
-                sleep 2 
+                udevadm settle --timeout=10
             else
                 echo "-> [ERROR CRITICO] sfdisk --append fallo. Posible solapamiento de sectores."
             fi
