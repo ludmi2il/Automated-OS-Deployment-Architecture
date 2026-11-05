@@ -84,6 +84,14 @@ function Format-SecondaryDataDisk {
         [int]$DiskNumber,
         [string]$PartitionStyle
     )
+
+    # NUEVO: Chequeo de seguridad contra borrado accidental
+    $particionesReales = Get-Partition -DiskNumber $DiskNumber | Where-Object { $_.Type -notmatch 'Reserved' -and $_.Size -gt 16MB }
+    
+    if ($particionesReales) {
+        Write-Warning "-> [PROTECCIÓN] El disco secundario $DiskNumber ya contiene particiones. Abortando formateo por seguridad."
+        return
+    }
     
     Set-Disk -Number $DiskNumber -IsOffline $false -ErrorAction SilentlyContinue
     Set-Disk -Number $DiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
@@ -159,6 +167,8 @@ try {
     } else {
         if ($dataVol -and $WipeData) {
             Write-Host "-> [WIPE_DATA] Ignorando retención. Forzando formato destructivo en disco secundario."
+            # Borra físicamente la partición retenida
+            Get-Partition -Volume $dataVol | Remove-Partition -Confirm:$false
         }
        
         Clear-DriveLetter
