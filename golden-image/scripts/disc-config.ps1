@@ -84,6 +84,14 @@ function Format-SecondaryDataDisk {
         [int]$DiskNumber,
         [string]$PartitionStyle
     )
+
+    # NUEVO: Chequeo de seguridad contra borrado accidental
+    $particionesReales = Get-Partition -DiskNumber $DiskNumber | Where-Object { $_.Type -notmatch 'Reserved' -and $_.Size -gt 16MB }
+    
+    if ($particionesReales) {
+        Write-Warning "-> [PROTECCIÓN] El disco secundario $DiskNumber ya contiene particiones. Abortando formateo por seguridad."
+        return
+    }
     
     Set-Disk -Number $DiskNumber -IsOffline $false -ErrorAction SilentlyContinue
     Set-Disk -Number $DiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
@@ -91,7 +99,7 @@ function Format-SecondaryDataDisk {
     
     # SE REEMPLAZA EL GPT HARDCODEADO EN CÓDIGO POR LA VARIABLE DINÁMICA
     Initialize-Disk -Number $DiskNumber -PartitionStyle $PartitionStyle -Confirm:$false
-    New-Partition -DiskNumber $DiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
+    New-Partition -DiskNumber $DiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos Locales" -Confirm:$false | Out-Null
 }
 
 function Split-SingleOSDisk {
@@ -129,7 +137,7 @@ function Split-SingleOSDisk {
     Resize-Partition -DriveLetter C -Size $targetSize
 
     if ($crearD) {
-        New-Partition -DiskNumber $DiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos" -Confirm:$false | Out-Null
+        New-Partition -DiskNumber $DiskNumber -UseMaximumSize -DriveLetter D | Format-Volume -FileSystem NTFS -NewFileSystemLabel "Datos Locales" -Confirm:$false | Out-Null
     }
 }
 
@@ -137,28 +145,56 @@ function Split-SingleOSDisk {
 # 2. LÓGICA PRINCIPAL (WORKFLOW)
 # ==============================================================================
 
-Clear-DriveLetter
+    
 Remove-RecoveryPartition
+try {
+    Write-Host "-> Iniciando configuración de almacenamiento"
+    Remove-RecoveryPartition
+   
+    # 1. Evaluar la existencia del archivo bandera
+    $WipeData = Test-Path "C:\Windows\Setup\Scripts\WIPE_DATA_FLAG"
 
-# Mapear todo el hardware disponible
-$inventory = Get-StorageInventory
+    # 2. Evaluar estado real vs orden del administrador
+    $dataVol = Get-Volume | Where-Object { $_.FileSystemLabel -eq "Datos Locales" }
 
-# Procesar según los escenarios de hardware
-if ($inventory.ExtraSSDs.Count -gt 0) {
-    
-    # Escenario 1A: Existe un SSD adicional (Prioridad máxima)
-    Maximize-Partition
-    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraSSDs[0].Number -PartitionStyle $inventory.OSDisk.PartitionStyle
+    if ($dataVol -and -not $WipeData) {
+        Write-Host "-> [MODO RECUPERACION] Partición retenida por FOG detectada."
+        if ($dataVol.DriveLetter -ne 'D') {
+            Clear-DriveLetter -Letter 'D'
+            Get-Partition -Volume $dataVol | Set-Partition -NewDriveLetter D -ErrorAction SilentlyContinue
+        }
+        Maximize-Partition -DriveLetter 'C'
+    } else {
+        if ($dataVol -and $WipeData) {
+            Write-Host "-> [WIPE_DATA] Ignorando retención. Forzando formato destructivo en disco secundario."
+            # Borra físicamente la partición retenida
+            Get-Partition -Volume $dataVol | Remove-Partition -Confirm:$false
+        }
+       
+        Clear-DriveLetter
+        $inventory = Get-StorageInventory
 
-} elseif ($inventory.ExtraHDDs.Count -gt 0) {
-    
-    # Escenario 1B: Existe un HDD mecánico adicional (Prioridad media)
-    Maximize-Partition
-    Format-SecondaryDataDisk -DiskNumber $inventory.ExtraHDDs[0].Number -PartitionStyle $inventory.OSDisk.PartitionStyle
+        # Procesar según los escenarios de hardware
+        if ($inventory.ExtraSSDs.Count -gt 0) {
+            
+            # Escenario 1A: Existe un SSD adicional (Prioridad máxima)
+            Maximize-Partition
+            Format-SecondaryDataDisk -DiskNumber $inventory.ExtraSSDs[0].Number -PartitionStyle $inventory.OSDisk.PartitionStyle
 
-} else {
-    
-    # Escenario 2: No hay discos adicionales, particionar el disco del SO
-    Split-SingleOSDisk -DiskNumber $inventory.OSDisk.Number -SizeGB $inventory.OSDisk.SizeGB
+        } elseif ($inventory.ExtraHDDs.Count -gt 0) {
+            
+            # Escenario 1B: Existe un HDD mecánico adicional (Prioridad media)
+            Maximize-Partition
+            Format-SecondaryDataDisk -DiskNumber $inventory.ExtraHDDs[0].Number -PartitionStyle $inventory.OSDisk.PartitionStyle
 
+        } else {
+            
+            # Escenario 2: No hay discos adicionales, particionar el disco del SO
+            Split-SingleOSDisk -DiskNumber $inventory.OSDisk.Number -SizeGB $inventory.OSDisk.SizeGB
+
+        }
+    }
+}
+catch {
+    Write-Error "[CRÍTICO] Error durante la configuración de almacenamiento: $($_.Exception.Message)"
 }

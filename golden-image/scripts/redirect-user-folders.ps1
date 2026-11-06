@@ -31,7 +31,7 @@ function Test-DataDriveAvailable {
     param([string]$DriveLetter = 'D')
     
     $vol = Get-Volume -DriveLetter $DriveLetter -ErrorAction SilentlyContinue | 
-           Where-Object { $_.FileSystemLabel -eq 'Datos' -or $_.DriveLetter -eq $DriveLetter }
+           Where-Object { $_.FileSystemLabel -eq 'Datos Locales' -or $_.DriveLetter -eq $DriveLetter }
     return ($null -ne $vol)
 }
 
