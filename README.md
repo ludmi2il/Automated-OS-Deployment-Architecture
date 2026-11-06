@@ -57,15 +57,39 @@ Se conectan vía Ethernet directamente a los puertos LAN del Router. Reciben su 
 config:
   layout: elk
   flowchart:
-    nodeSpacing: 50
-    rankSpacing: 50
+    nodeSpacing: 60
+    rankSpacing: 60
 ---
 flowchart TB
-  subgraph fase1["Fase 1: FOS Post-init (disaster-recovery.sh)"]
-        Escaneo{"¿Detecta etiqueta \n'Datos Locales'?"}
-        Sano["Extrae estado actual\n(sfdisk -d)"]
-        Corrupto["Consulta histórico"]
-        Borrar["Borra backup"]
+  subgraph fase1["Fase 1: FOS Post-init (fog.postinit)"]
+        
+        subgraph select["1.1 - select-disk.sh (Jerarquía y Filtrado)"]
+            NVMe{"1. Evalúa NVMe\n(>60GB)"}
+            SSD{"2. Evalúa SSD\n(>60GB)"}
+            HDD{"3. Evalúa HDD\n(>60GB)"}
+            
+            Target["Exporta $fdrive"]
+            Critico["[ERROR CRÍTICO]\nSolo hay discos protegidos\no hardware ausente"]
+            Apagar(["Apagado forzado\n(poweroff -f)"])
+            
+            %% Conexiones de caída en cascada (Fallbacks)
+            NVMe -- "No existe\no es Datos Protegido" --> SSD
+            SSD -- "No existe\no es Datos Protegido" --> HDD
+            HDD -- "No existe\no es Datos Protegido" --> Critico
+            Critico --> Apagar
+            
+            %% Conexiones de éxito directo
+            NVMe -- "Aprobado (Sistema/Vacío\no WIPE_DATA=true)" --> Target
+            SSD -- "Aprobado (Sistema/Vacío\no WIPE_DATA=true)" --> Target
+            HDD -- "Aprobado (Sistema/Vacío\no WIPE_DATA=true)" --> Target
+        end
+
+        subgraph dr["1.2 - disaster-recovery.sh"]
+            Escaneo{"¿Detecta etiqueta \n'Datos Locales'?"}
+            Sano["Extrae estado actual\n(sfdisk -d)"]
+            Corrupto["Consulta histórico"]
+            Borrar["Borra backup"]
+        end
         NFS[("NFS (FOG)")]
   end
   
@@ -93,7 +117,9 @@ flowchart TB
   end
 
     RAM[("Archivo en RAM")]
-    Start([Boot FOS]) --> Escaneo
+    
+    Start([Boot FOS]) --> NVMe
+    Target --> Escaneo
 
     Escaneo -- Sí --> Sano
     Escaneo -- No --> Corrupto
@@ -116,6 +142,7 @@ flowchart TB
     Append --> Probe
     Probe --> Montar
     Montar --> Bandera
+    
     Bandera -- Sí --> InyectarFlag
     Bandera -- No --> PS
     InyectarFlag --> PS
@@ -129,6 +156,10 @@ flowchart TB
     
     Max --> Fin(["Aprovisionamiento Exitoso"])
     Particionar --> Fin
+    %% Aplicación de clases dinámicas (transparencia de fondo y bordes sólidos)
+    classDef transparente fill:none;
+    
+    class fase1 transparente;
 ```
 <br>
 </details>
