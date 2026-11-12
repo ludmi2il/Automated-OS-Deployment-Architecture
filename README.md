@@ -64,24 +64,18 @@ flowchart TB
   subgraph fase1["Fase 1: FOS Post-init (fog.postinit)"]
         
         subgraph select["1.1 - select-disk.sh (Jerarquía y Filtrado)"]
-            NVMe{"1. Evalúa NVMe\n(>60GB)"}
-            SSD{"2. Evalúa SSD\n(>60GB)"}
-            HDD{"3. Evalúa HDD\n(>60GB)"}
-            
+            Iter["Itera jerarquía: NVMe → SSD → HDD\n(Filtra mayor a 60GB y datos puros)"]
+            EvalDisco{"¿Disco apto\no WIPE_DATA?"}
+            Target["Exporta $fdrive"]
+            Critico(["[ERROR CRÍTICO] Sin disco apto\nApagado forzado (poweroff -f)"])
             Target["Exporta $fdrive"]
             Critico["[ERROR CRÍTICO]\nSolo hay discos protegidos\no hardware ausente"]
             Apagar(["Apagado forzado\n(poweroff -f)"])
-            
-            %% Conexiones de caída en cascada (Fallbacks)
-            NVMe -- "No existe\no es Datos Protegido" --> SSD
-            SSD -- "No existe\no es Datos Protegido" --> HDD
-            HDD -- "No existe\no es Datos Protegido" --> Critico
+            Iter --> EvalDisco
+            EvalDisco -- "Sí" --> Target
+            EvalDisco -- "No" --> Critico
             Critico --> Apagar
             
-            %% Conexiones de éxito directo
-            NVMe -- "Aprobado (Sistema/Vacío\no WIPE_DATA=true)" --> Target
-            SSD -- "Aprobado (Sistema/Vacío\no WIPE_DATA=true)" --> Target
-            HDD -- "Aprobado (Sistema/Vacío\no WIPE_DATA=true)" --> Target
         end
 
         subgraph dr["1.2 - disaster-recovery.sh"]
@@ -118,7 +112,7 @@ flowchart TB
 
     RAM[("Archivo en RAM")]
     
-    Start([Boot FOS]) --> NVMe
+    Start([Boot FOS]) --> Iter
     Target --> Escaneo
 
     Escaneo -- Sí --> Sano
